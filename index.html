@@ -315,6 +315,141 @@
       border-top: 1px solid rgba(255,255,255,0.2);
       padding-top: 6px;
     }
+    /* ===== FPS モード ===== */
+    #mode-switch-btn {
+      position: absolute;
+      top: 12px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 12px; font-weight: bold;
+      cursor: pointer; z-index: 30;
+      transition: background 0.2s, transform 0.1s;
+      white-space: nowrap;
+    }
+    #mode-switch-btn:active { transform: translateX(-50%) scale(0.95); }
+    #mode-switch-btn.fps-active { background: rgba(37,99,235,0.8); border-color: rgba(99,179,237,0.4); }
+
+    #fps-overlay {
+      display: none;
+      position: absolute; inset: 0;
+      pointer-events: none; z-index: 15;
+    }
+    #crosshair {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px; height: 20px;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute;
+      background: rgba(255,255,255,0.88);
+      box-shadow: 0 0 2px rgba(0,0,0,0.8);
+    }
+    #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+    #crosshair::after  { height: 2px; width: 100%; top: 50%; transform: translateY(-50%); }
+    #fly-indicator {
+      display: none;
+      position: absolute; top: 58px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(37,99,235,0.85); color: #fff;
+      padding: 4px 14px; border-radius: 14px;
+      font-size: 12px; font-weight: bold;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    #delete-ring {
+      display: none;
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 56px; height: 56px;
+    }
+    #delete-ring svg { transform: rotate(-90deg); }
+    #delete-ring circle {
+      fill: none; stroke: #ef4444; stroke-width: 4;
+      stroke-dasharray: 132; stroke-dashoffset: 132;
+      stroke-linecap: round;
+    }
+
+    #right-joy-zone {
+      display: none;
+      position: absolute;
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 70px);
+      right: 100px;
+      width: 100px; height: 100px;
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(8px);
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%; touch-action: none;
+      z-index: 20; align-items: center; justify-content: center;
+    }
+    #right-joy-knob {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, #9333ea, #7c3aed);
+      border: 2px solid #fff; border-radius: 50%;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      position: absolute; pointer-events: none;
+    }
+    #right-joy-label {
+      position: absolute; top: -22px; left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px; color: rgba(255,255,255,0.8);
+      font-weight: bold; white-space: nowrap;
+      pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    }
+
+    #jump-btn {
+      display: none;
+      position: absolute;
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 160px);
+      right: 15px;
+      width: 56px; height: 56px; border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #16a34a, #15803d);
+      color: #fff; font-size: 22px;
+      box-shadow: 0 6px 18px rgba(22,163,74,0.5);
+      cursor: pointer; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 20; transition: transform 0.1s;
+    }
+    #jump-btn:active { transform: scale(0.9); }
+
+    #fps-action-btn {
+      display: none;
+      position: absolute;
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 70px);
+      right: 15px;
+      width: 70px; height: 70px; border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff; font-size: 12px; font-weight: bold;
+      box-shadow: 0 8px 25px rgba(37,99,235,0.5);
+      cursor: pointer; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 2px; z-index: 20; touch-action: none;
+      transition: transform 0.1s, background 0.2s;
+    }
+    #fps-action-btn:active { transform: scale(0.9); }
+    #fps-action-btn.deleting {
+      background: linear-gradient(135deg, #dc2626, #991b1b);
+      box-shadow: 0 8px 25px rgba(220,38,38,0.5);
+    }
+    #fps-action-btn span { font-size: 20px; line-height: 1; }
+
+    #fps-toolbar {
+      display: none;
+      position: absolute;
+      bottom: max(10px, env(safe-area-inset-bottom));
+      left: 50%; transform: translateX(-50%);
+      align-items: center; gap: 4px;
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(14px);
+      padding: 6px 10px; border-radius: 22px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      max-width: 96vw; z-index: 25;
+    }
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -369,6 +504,57 @@
       <button class="opt-btn" style="flex: 1;" onclick="document.getElementById('import-file-input').click()">📂 読込</button>
       <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importAllSaves(event)">
     </div>
+  </div>
+
+  <!-- モード切替（常時表示） -->
+  <button id="mode-switch-btn" onclick="switchMode()">🎮 FPSモード</button>
+
+  <!-- FPS オーバーレイ -->
+  <div id="fps-overlay">
+    <div id="crosshair"></div>
+    <div id="fly-indicator">✈ 飛行中</div>
+    <div id="delete-ring">
+      <svg viewBox="0 0 56 56" width="56" height="56">
+        <circle cx="28" cy="28" r="21"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- 右ジョイスティック（視点） -->
+  <div id="right-joy-zone">
+    <div id="right-joy-label">👁 視点</div>
+    <div id="right-joy-knob"></div>
+  </div>
+
+  <!-- ジャンプ（2連打で飛行切替） -->
+  <button id="jump-btn" onclick="playerJump()">⬆</button>
+
+  <!-- FPS アクション（タップ=配置 / 長押し=削除） -->
+  <button id="fps-action-btn">
+    <span>🧱</span>
+    <div>配置/削除</div>
+  </button>
+
+  <!-- FPS ツールバー -->
+  <div id="fps-toolbar">
+    <button class="btn" onclick="toggleMenu('block-picker')">
+      <span>🧱</span>
+      <div id="fps-block-label">1×1</div>
+    </button>
+    <button class="btn" onclick="toggleMenu('color-picker')">
+      <span id="fps-color-dot" class="color-dot"></span>
+      <div>カラー</div>
+    </button>
+    <div class="toolbar-sep"></div>
+    <button class="btn" id="btn-fly" onclick="toggleFlyMode()">
+      <span>✈</span>
+      <div>飛行</div>
+    </button>
+    <div class="toolbar-sep"></div>
+    <button class="btn" onclick="enterBuildMode()">
+      <span>🏗</span>
+      <div>建築へ</div>
+    </button>
   </div>
 
   <!-- その他メニュー -->
@@ -447,12 +633,46 @@
     const blocksHistory = [];
     const blockMeshes = [];
 
-    let mode = 'add'; 
+    let mode = 'add';
     let currentBlockType = '1x1';
     let currentColor = 0xee2222;
     let currentRotation = 0;
     let snapOffsetX = 0;
     let snapOffsetZ = 0;
+
+    // ===== FPS モード =====
+    let gameMode = 'build';
+
+    const PLAYER_H   = 1.8;
+    const PLAYER_EYE = 1.62;
+    const PLAYER_R   = 0.28;
+    const GRAVITY    = -22;
+    const JUMP_FORCE = 9;
+    const WALK_SPEED = 5;
+    const FLY_SPEED  = 8;
+
+    const player = {
+      pos: new THREE.Vector3(0, 0, 0),
+      vel: new THREE.Vector3(0, 0, 0),
+      yaw: Math.PI / 4,
+      pitch: 0,
+      onGround: false,
+      isFlying: false,
+    };
+
+    let lastFPSTime = 0;
+
+    // 右ジョイスティック
+    let isRightJoyActive = false;
+    let rightJoyTouchId = null;
+    let rightJoyVec = { x: 0, y: 0 };
+
+    // FPSアクション長押し
+    let fpsLongPressTimer = null;
+    let fpsTick = null;
+    let fpsActionStartTime = 0;
+    const LONG_PRESS_MS = 600;
+    const RING_CIRC = 132;
 
     const palette = [0xee2222, 0x2277ee, 0xffcc00, 0x22aa44, 0xffffff, 0x222222, 0x9933ee];
 
@@ -812,6 +1032,41 @@
       joyVec.y = dy / maxDist;
     }
 
+    // --- 右ジョイスティック（FPS視点） ---
+    const rightJoyZone = document.getElementById('right-joy-zone');
+    const rightJoyKnob = document.getElementById('right-joy-knob');
+
+    rightJoyZone.addEventListener('pointerdown', (e) => {
+      isRightJoyActive = true;
+      rightJoyTouchId = e.pointerId;
+      updateRightJoy(e);
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (isRightJoyActive && e.pointerId === rightJoyTouchId) updateRightJoy(e);
+    });
+    window.addEventListener('pointerup', (e) => {
+      if (isRightJoyActive && e.pointerId === rightJoyTouchId) {
+        isRightJoyActive = false;
+        rightJoyTouchId = null;
+        rightJoyVec = { x: 0, y: 0 };
+        rightJoyKnob.style.transform = 'translate(0px,0px)';
+      }
+    });
+
+    function updateRightJoy(e) {
+      const rect = rightJoyZone.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top  + rect.height / 2;
+      let dx = e.clientX - cx;
+      let dy = e.clientY - cy;
+      const dist = Math.hypot(dx, dy);
+      const max  = rect.width / 2 - 10;
+      if (dist > max) { dx = dx/dist*max; dy = dy/dist*max; }
+      rightJoyKnob.style.transform = `translate(${dx}px,${dy}px)`;
+      rightJoyVec.x = dx / max;
+      rightJoyVec.y = dy / max;
+    }
+
     // --- 🖐️ 画面タッチ（ズーム・パン・配置移動）制御 ---
     const dom = renderer.domElement;
     const activeTouches = new Map();
@@ -836,6 +1091,8 @@
       if (activeTouches.has(e.pointerId)) {
         activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       }
+
+      if (gameMode === 'fps') return;
 
       // 2本指操作：ピンチイン・アウト（拡大縮小） & 2本指パン（カメラ位置移動）
       if (activeTouches.size === 2) {
@@ -958,13 +1215,17 @@
         document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
         swatch.classList.add('active');
         currentColor = col;
-        document.getElementById('color-dot-btn').style.backgroundColor = '#' + col.toString(16).padStart(6, '0');
+        const hex = '#' + col.toString(16).padStart(6, '0');
+        document.getElementById('color-dot-btn').style.backgroundColor = hex;
+        document.getElementById('fps-color-dot').style.backgroundColor = hex;
         toggleMenu('');
       };
       colorPicker.appendChild(swatch);
     });
-    // カラードットの初期色を設定
-    document.getElementById('color-dot-btn').style.backgroundColor = '#' + palette[0].toString(16).padStart(6, '0');
+    // カラードット初期色（建築 & FPS両方）
+    const initHex = '#' + palette[0].toString(16).padStart(6, '0');
+    document.getElementById('color-dot-btn').style.backgroundColor = initHex;
+    document.getElementById('fps-color-dot').style.backgroundColor = initHex;
 
     function toggleMenu(id) {
       document.querySelectorAll('.sub-menu').forEach(m => {
@@ -1018,7 +1279,9 @@
       document.querySelectorAll('#block-picker .opt-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       updatePreviewMesh();
-      document.getElementById('block-type-label').innerText = blockTypeLabels[type] || type;
+      const lbl = blockTypeLabels[type] || type;
+      document.getElementById('block-type-label').innerText = lbl;
+      document.getElementById('fps-block-label').innerText = lbl;
       toggleMenu('');
     }
 
@@ -1131,6 +1394,273 @@
       }
     }
 
+    // ===== FPS: モード切替 =====
+    function switchMode() {
+      if (gameMode === 'build') enterFPSMode(); else enterBuildMode();
+    }
+
+    function enterFPSMode() {
+      gameMode = 'fps';
+      player.pos.set(cameraTarget.x, Math.max(0, cameraTarget.y), cameraTarget.z);
+      player.vel.set(0, 0, 0);
+      player.yaw = cameraTheta;
+      player.pitch = 0;
+      player.onGround = false;
+      player.isFlying = false;
+      lastFPSTime = performance.now();
+
+      document.getElementById('toolbar').style.display = 'none';
+      document.getElementById('action-btn').style.display = 'none';
+      document.getElementById('fps-overlay').style.display = 'block';
+      document.getElementById('right-joy-zone').style.display = 'flex';
+      document.getElementById('jump-btn').style.display = 'flex';
+      document.getElementById('fps-action-btn').style.display = 'flex';
+      document.getElementById('fps-toolbar').style.display = 'flex';
+      document.getElementById('fly-indicator').style.display = 'none';
+      document.getElementById('btn-fly').classList.remove('active');
+      document.getElementById('mode-switch-btn').textContent = '🏗 建築モード';
+      document.getElementById('mode-switch-btn').classList.add('fps-active');
+      previewMesh.visible = false;
+      mouseVector.set(-999, -999);
+    }
+
+    function enterBuildMode() {
+      gameMode = 'build';
+      cameraTarget.set(player.pos.x, 0, player.pos.z);
+      cameraTheta = player.yaw;
+
+      document.getElementById('toolbar').style.display = 'flex';
+      document.getElementById('action-btn').style.display = 'flex';
+      document.getElementById('fps-overlay').style.display = 'none';
+      document.getElementById('right-joy-zone').style.display = 'none';
+      document.getElementById('jump-btn').style.display = 'none';
+      document.getElementById('fps-action-btn').style.display = 'none';
+      document.getElementById('fps-toolbar').style.display = 'none';
+      document.getElementById('mode-switch-btn').textContent = '🎮 FPSモード';
+      document.getElementById('mode-switch-btn').classList.remove('fps-active');
+      updateCameraPosition();
+    }
+
+    // ===== FPS: ジャンプ / 飛行 =====
+    let lastJumpTime = 0;
+    function playerJump() {
+      const now = Date.now();
+      if (now - lastJumpTime < 350) {
+        toggleFlyMode();
+      } else if (player.isFlying) {
+        player.vel.y = FLY_SPEED * 0.7;
+      } else if (player.onGround) {
+        player.vel.y = JUMP_FORCE;
+        player.onGround = false;
+      }
+      lastJumpTime = now;
+    }
+
+    function toggleFlyMode() {
+      player.isFlying = !player.isFlying;
+      if (player.isFlying) player.vel.y = 0;
+      document.getElementById('fly-indicator').style.display = player.isFlying ? 'block' : 'none';
+      document.getElementById('btn-fly').classList.toggle('active', player.isFlying);
+      triggerVibrate();
+    }
+
+    // ===== FPS: 物理 =====
+    function updateFPS(now) {
+      const dt = Math.min((now - lastFPSTime) * 0.001, 0.05);
+      lastFPSTime = now;
+      if (dt <= 0) return;
+
+      // 移動（左ジョイスティック → yaw基準）
+      const speed = player.isFlying ? FLY_SPEED : WALK_SPEED;
+      const fwd  = -joyVec.y;
+      const right =  joyVec.x;
+      const cos = Math.cos(player.yaw), sin = Math.sin(player.yaw);
+      const dx = (right * cos + fwd * sin) * speed * dt;
+      const dz = (-right * sin + fwd * cos) * speed * dt;
+
+      player.pos.x += dx; resolveCollision('x');
+      player.pos.z += dz; resolveCollision('z');
+
+      // 重力 / 飛行
+      if (player.isFlying) {
+        player.vel.y = -rightJoyVec.y * FLY_SPEED * 0.6;
+      } else {
+        player.vel.y += GRAVITY * dt;
+        player.vel.y = Math.max(player.vel.y, -30);
+      }
+      player.onGround = false;
+      player.pos.y += player.vel.y * dt;
+      resolveCollision('y');
+
+      // 床
+      if (player.pos.y < 0) {
+        player.pos.y = 0; player.onGround = true; player.vel.y = 0;
+      }
+      // グリッド外制限
+      const half = GRID_SIZE / 2 - PLAYER_R;
+      player.pos.x = Math.max(-half, Math.min(half, player.pos.x));
+      player.pos.z = Math.max(-half, Math.min(half, player.pos.z));
+
+      // 視点（右ジョイスティック）
+      player.yaw   += rightJoyVec.x * 0.04;
+      player.pitch += rightJoyVec.y * 0.03;
+      player.pitch  = Math.max(-Math.PI/2 + 0.05, Math.min(Math.PI/2 - 0.05, player.pitch));
+
+      // カメラ
+      const eye = player.pos.clone().add(new THREE.Vector3(0, PLAYER_EYE, 0));
+      camera.position.copy(eye);
+      const lookDir = new THREE.Vector3(
+        Math.sin(player.yaw)  * Math.cos(player.pitch),
+        -Math.sin(player.pitch),
+        Math.cos(player.yaw)  * Math.cos(player.pitch)
+      );
+      camera.lookAt(eye.clone().add(lookDir));
+
+      updateFPSRaycast(lookDir);
+    }
+
+    function resolveCollision(axis) {
+      const r = PLAYER_R, h = PLAYER_H;
+      const x0 = Math.floor(player.pos.x - r) - 1, x1 = Math.floor(player.pos.x + r) + 1;
+      const y0 = Math.floor(player.pos.y)     - 1, y1 = Math.floor(player.pos.y + h) + 1;
+      const z0 = Math.floor(player.pos.z - r) - 1, z1 = Math.floor(player.pos.z + r) + 1;
+
+      for (let bx = x0; bx <= x1; bx++) {
+        for (let by = y0; by <= y1; by++) {
+          for (let bz = z0; bz <= z1; bz++) {
+            if (!occupiedGrid.has(`${bx},${by},${bz}`)) continue;
+            // プレイヤーAABB
+            const pxMin = player.pos.x - r, pxMax = player.pos.x + r;
+            const pyMin = player.pos.y,     pyMax = player.pos.y + h;
+            const pzMin = player.pos.z - r, pzMax = player.pos.z + r;
+            // 重なり確認（全軸）
+            if (pxMax <= bx || pxMin >= bx+1) continue;
+            if (pyMax <= by || pyMin >= by+1) continue;
+            if (pzMax <= bz || pzMin >= bz+1) continue;
+            // 軸別解決
+            if (axis === 'x') {
+              const pL = pxMax - bx, pR = (bx+1) - pxMin;
+              if (pL < pR) player.pos.x -= pL; else player.pos.x += pR;
+            } else if (axis === 'z') {
+              const pF = pzMax - bz, pB = (bz+1) - pzMin;
+              if (pF < pB) player.pos.z -= pF; else player.pos.z += pB;
+            } else {
+              const pUp = (by+1) - pyMin, pDn = pyMax - by;
+              if (pUp < pDn) {
+                player.pos.y += pUp; player.onGround = true;
+                if (player.vel.y < 0) player.vel.y = 0;
+              } else {
+                player.pos.y -= pDn;
+                if (player.vel.y > 0) player.vel.y = 0;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    function updateFPSRaycast(lookDir) {
+      const ray = new THREE.Raycaster(camera.position, lookDir.clone().normalize(), 0.1, 6);
+      const hits = ray.intersectObjects([plane, ...blockMeshes], true);
+
+      if (hits.length > 0) {
+        const hit = hits[0];
+        const dim = getBlockDimensions(currentBlockType, currentRotation);
+        if (hit.object === plane) {
+          const ox = Math.floor(hit.point.x - dim.w/2 + 0.5);
+          const oz = Math.floor(hit.point.z - dim.d/2 + 0.5);
+          targetOccupiedCells = getOccupiedCells(ox, 0, oz, currentBlockType, currentRotation);
+          isCanPlace = canPlaceBlock(targetOccupiedCells);
+          previewMesh.position.set(ox+dim.w/2-0.5, dim.h/2-0.5, oz+dim.d/2-0.5);
+          previewMesh.material.color.setHex(isCanPlace ? 0x00ff88 : 0xff3333);
+          previewMesh.visible = true;
+          hoveredGroup = null;
+        } else {
+          hoveredGroup = hit.object.userData.rootGroup;
+          if (hoveredGroup) {
+            const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+            const p = hit.point.clone().add(norm.multiplyScalar(0.5));
+            const ox = Math.floor(p.x) - snapOffsetX;
+            const oy = Math.max(0, Math.floor(p.y + 0.5));
+            const oz = Math.floor(p.z) - snapOffsetZ;
+            targetOccupiedCells = getOccupiedCells(ox, oy, oz, currentBlockType, currentRotation);
+            isCanPlace = canPlaceBlock(targetOccupiedCells);
+            previewMesh.position.set(ox+dim.w/2-0.5, oy+dim.h/2-0.5, oz+dim.d/2-0.5);
+            previewMesh.material.color.setHex(isCanPlace ? 0x00ff88 : 0xff3333);
+            previewMesh.visible = true;
+          }
+        }
+      } else {
+        previewMesh.visible = false;
+        hoveredGroup = null;
+        isCanPlace = false;
+      }
+    }
+
+    // ===== FPS: 配置・削除アクション =====
+    function executeFPSPlace() {
+      if (!isCanPlace || !previewMesh.visible) return;
+      const dim = getBlockDimensions(currentBlockType, currentRotation);
+      const group = createBlockMesh(currentBlockType, currentColor, currentRotation);
+      const ox = previewMesh.position.x - dim.w/2 + 0.5;
+      const oy = previewMesh.position.y - dim.h/2 + 0.5;
+      const oz = previewMesh.position.z - dim.d/2 + 0.5;
+      group.position.set(ox, oy, oz);
+      scene.add(group);
+      targetOccupiedCells.forEach(k => occupiedGrid.set(k, group));
+      group.traverse(c => { if (c.isMesh) { c.userData.rootGroup = group; blockMeshes.push(c); } });
+      blocksHistory.push({ group, cells: [...targetOccupiedCells], type: currentBlockType, color: currentColor, rot: currentRotation });
+      playSound('place'); triggerVibrate(); updateBlockCount(); autoSave();
+    }
+
+    function executeFPSDelete() {
+      if (!hoveredGroup) return;
+      scene.remove(hoveredGroup);
+      for (const [k, v] of occupiedGrid.entries()) { if (v === hoveredGroup) occupiedGrid.delete(k); }
+      hoveredGroup.traverse(c => { const i = blockMeshes.indexOf(c); if (i > -1) blockMeshes.splice(i,1); });
+      const hi = blocksHistory.findIndex(h => h.group === hoveredGroup);
+      if (hi > -1) blocksHistory.splice(hi, 1);
+      hoveredGroup = null; previewMesh.visible = false;
+      playSound('delete'); triggerVibrate(); updateBlockCount(); autoSave();
+    }
+
+    // FPSアクションボタン（タップ=配置・長押し=削除）
+    const fpsActionBtn = document.getElementById('fps-action-btn');
+    fpsActionBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      fpsActionStartTime = Date.now();
+      const circle = document.querySelector('#delete-ring circle');
+      document.getElementById('delete-ring').style.display = 'block';
+      fpsActionBtn.classList.add('deleting');
+      let elapsed = 0;
+      fpsTick = setInterval(() => {
+        elapsed += 33;
+        circle.style.strokeDashoffset = RING_CIRC * (1 - Math.min(elapsed / LONG_PRESS_MS, 1));
+      }, 33);
+      fpsLongPressTimer = setTimeout(() => {
+        clearInterval(fpsTick); fpsTick = null;
+        document.getElementById('delete-ring').style.display = 'none';
+        document.querySelector('#delete-ring circle').style.strokeDashoffset = RING_CIRC;
+        fpsActionBtn.classList.remove('deleting');
+        executeFPSDelete();
+        fpsLongPressTimer = null;
+      }, LONG_PRESS_MS);
+    });
+
+    function cancelFPSAction(didLong) {
+      clearTimeout(fpsLongPressTimer); fpsLongPressTimer = null;
+      clearInterval(fpsTick); fpsTick = null;
+      document.getElementById('delete-ring').style.display = 'none';
+      document.querySelector('#delete-ring circle').style.strokeDashoffset = RING_CIRC;
+      fpsActionBtn.classList.remove('deleting');
+      if (!didLong && fpsActionStartTime && (Date.now() - fpsActionStartTime) < LONG_PRESS_MS) {
+        executeFPSPlace();
+      }
+      fpsActionStartTime = 0;
+    }
+    fpsActionBtn.addEventListener('pointerup',     () => cancelFPSAction(false));
+    fpsActionBtn.addEventListener('pointercancel', () => cancelFPSAction(true));
+
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
@@ -1141,19 +1671,21 @@
     autoLoad();
 
     // ループ処理
-    function animate() {
+    function animate(now = 0) {
       requestAnimationFrame(animate);
 
-      // パッド操作時のカメラ更新
-      if (isJoystickActive) {
-        cameraTheta += joyVec.x * 0.04;
-        cameraPhi += joyVec.y * 0.03;
-        // 仰角制限（地面より下・真上を超えない）
-        cameraPhi = Math.max(0.05, Math.min(Math.PI / 2 - 0.05, cameraPhi));
-        updateCameraPosition();
+      if (gameMode === 'build') {
+        if (isJoystickActive) {
+          cameraTheta += joyVec.x * 0.04;
+          cameraPhi   += joyVec.y * 0.03;
+          cameraPhi = Math.max(0.05, Math.min(Math.PI / 2 - 0.05, cameraPhi));
+          updateCameraPosition();
+        }
+        updateRaycast();
+      } else {
+        updateFPS(now);
       }
 
-      updateRaycast();
       renderer.render(scene, camera);
     }
     animate();
