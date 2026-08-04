@@ -37,7 +37,7 @@
     /* 🕹️ 左側 バーチャルパッド（ツールバーの上に配置） */
     #joystick-zone {
       position: absolute;
-      bottom: 80px;
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 70px);
       left: 15px;
       width: 100px;
       height: 100px;
@@ -101,7 +101,7 @@
     /* 🔘 アクションボタン（画面右下・ツールバーの上に配置） */
     #action-btn {
       position: absolute;
-      bottom: 80px;
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 70px);
       right: 15px;
       width: 70px;
       height: 70px;
@@ -131,19 +131,26 @@
     /* 下部UIツールバー */
     #toolbar {
       position: absolute;
-      bottom: 10px;
+      bottom: max(10px, env(safe-area-inset-bottom));
       left: 50%;
       transform: translateX(-50%);
       display: flex;
-      gap: 6px;
-      background: rgba(255, 255, 255, 0.85);
-      backdrop-filter: blur(12px);
-      padding: 6px 8px;
-      border-radius: 20px;
+      align-items: center;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(14px);
+      padding: 6px 10px;
+      border-radius: 22px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.3);
       max-width: 96vw;
-      overflow-x: auto;
       z-index: 25;
+    }
+    .toolbar-sep {
+      width: 1px;
+      background: rgba(0,0,0,0.12);
+      align-self: stretch;
+      margin: 3px 2px;
+      flex-shrink: 0;
     }
 
     .btn {
@@ -160,26 +167,73 @@
       align-items: center;
       gap: 2px;
       min-width: 46px;
+      flex-shrink: 0;
       transition: all 0.15s ease;
     }
     .btn:active { transform: scale(0.92); }
     .btn.active { background: #2563eb; color: #fff; }
-    .btn-danger.active { background: #dc2626; color: #fff; }
+
+    /* モードトグルボタン */
+    #btn-mode {
+      background: #2563eb;
+      color: #fff;
+      min-width: 58px;
+    }
+    #btn-mode.delete-mode {
+      background: #dc2626;
+    }
+
+    /* カラードット */
+    .color-dot {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid rgba(0,0,0,0.18);
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+
+    /* ブロック種ラベル */
+    #block-type-label {
+      font-size: 9px;
+      color: #2563eb;
+      font-weight: bold;
+      line-height: 1;
+    }
+
+    /* その他メニュー（縦型） */
+    #more-menu {
+      flex-direction: column !important;
+      width: 200px;
+      gap: 4px !important;
+    }
+    #more-menu .opt-btn {
+      text-align: left;
+      width: 100%;
+    }
+    #more-menu .opt-btn.danger {
+      color: #ff7070;
+      border-top: 1px solid rgba(255,255,255,0.15);
+      padding-top: 10px;
+      margin-top: 4px;
+    }
 
     /* サブメニュー（ツールバーのすぐ上に表示） */
     .sub-menu {
       position: absolute;
-      bottom: 70px;
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 64px);
       left: 50%;
       transform: translateX(-50%);
       display: none;
       gap: 8px;
-      background: rgba(0, 0, 0, 0.85);
-      backdrop-filter: blur(10px);
-      padding: 8px 12px;
-      border-radius: 16px;
+      background: rgba(20, 20, 30, 0.92);
+      backdrop-filter: blur(14px);
+      padding: 10px 14px;
+      border-radius: 18px;
       z-index: 30;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.08);
     }
     .color-swatch {
       width: 28px;
@@ -288,9 +342,9 @@
 
   <!-- ブロック種類選択 -->
   <div id="block-picker" class="sub-menu">
-    <button class="opt-btn active" onclick="selectBlockType('1x1', this)">1x1</button>
-    <button class="opt-btn" onclick="selectBlockType('2x1', this)">2x1</button>
-    <button class="opt-btn" onclick="selectBlockType('4x2', this)">4x2</button>
+    <button class="opt-btn active" onclick="selectBlockType('1x1', this)">1×1</button>
+    <button class="opt-btn" onclick="selectBlockType('2x1', this)">2×1</button>
+    <button class="opt-btn" onclick="selectBlockType('4x2', this)">4×2</button>
   </div>
 
   <!-- 色選択 -->
@@ -303,7 +357,7 @@
     <button class="opt-btn" onclick="setCameraView('iso')">斜め</button>
   </div>
 
-  <!-- セーブ & ロード作品管理メニュー -->
+  <!-- 作品管理メニュー -->
   <div id="save-picker" class="sub-menu">
     <div class="save-input-group">
       <input type="text" id="save-name-input" placeholder="作品名を入力...">
@@ -317,18 +371,44 @@
     </div>
   </div>
 
-  <!-- ツールバー -->
+  <!-- その他メニュー -->
+  <div id="more-menu" class="sub-menu">
+    <button class="opt-btn" onclick="rotatePreview(); toggleMenu('')">🔄 ブロックを回転</button>
+    <button class="opt-btn" onclick="shiftSnapOffset()">↔️ 配置位置を調整</button>
+    <button class="opt-btn" onclick="toggleMenu('save-picker')">💾 作品を管理</button>
+    <button class="opt-btn danger" onclick="toggleMenu(''); clearAllBlocks()">💥 全消去</button>
+  </div>
+
+  <!-- ツールバー（スリム6ボタン構成） -->
   <div id="toolbar">
-    <button class="btn active" id="btn-add" onclick="setMode('add')"><span>➕</span>配置</button>
-    <button class="btn btn-danger" id="btn-delete" onclick="setMode('delete')"><span>🗑️</span>削除</button>
-    <button class="btn" onclick="toggleMenu('block-picker')"><span>🧱</span>種類</button>
-    <button class="btn" onclick="toggleMenu('color-picker')"><span>🎨</span>カラー</button>
-    <button class="btn" onclick="rotatePreview()"><span>🔄</span>回転</button>
-    <button class="btn" onclick="shiftSnapOffset()"><span>↔️</span>位置</button>
+    <!-- グループ1: モードトグル -->
+    <button class="btn" id="btn-mode" onclick="toggleMode()">
+      <span id="mode-icon">➕</span>
+      <div id="mode-label">配置</div>
+    </button>
+
+    <div class="toolbar-sep"></div>
+
+    <!-- グループ2: ブロック設定 -->
+    <button class="btn" id="btn-block-type" onclick="toggleMenu('block-picker')">
+      <span>🧱</span>
+      <div id="block-type-label">1×1</div>
+    </button>
+    <button class="btn" id="btn-color" onclick="toggleMenu('color-picker')">
+      <span id="color-dot-btn" class="color-dot"></span>
+      <div>カラー</div>
+    </button>
+
+    <div class="toolbar-sep"></div>
+
+    <!-- グループ3: 操作 -->
     <button class="btn" onclick="undoLastAction()"><span>↩️</span>Undo</button>
-    <button class="btn" onclick="toggleMenu('save-picker')"><span>💾</span>作品</button>
     <button class="btn" onclick="toggleMenu('camera-picker')"><span>🎥</span>視点</button>
-    <button class="btn" onclick="clearAllBlocks()"><span>💥</span>全消去</button>
+
+    <div class="toolbar-sep"></div>
+
+    <!-- グループ4: その他 -->
+    <button class="btn" onclick="toggleMenu('more-menu')"><span>⋯</span>その他</button>
   </div>
 
   <script>
@@ -878,9 +958,13 @@
         document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
         swatch.classList.add('active');
         currentColor = col;
+        document.getElementById('color-dot-btn').style.backgroundColor = '#' + col.toString(16).padStart(6, '0');
+        toggleMenu('');
       };
       colorPicker.appendChild(swatch);
     });
+    // カラードットの初期色を設定
+    document.getElementById('color-dot-btn').style.backgroundColor = '#' + palette[0].toString(16).padStart(6, '0');
 
     function toggleMenu(id) {
       document.querySelectorAll('.sub-menu').forEach(m => {
@@ -895,25 +979,37 @@
       });
     }
 
+    function toggleMode() {
+      setMode(mode === 'add' ? 'delete' : 'add');
+    }
+
     function setMode(m) {
       mode = m;
-      document.getElementById('btn-add').classList.toggle('active', mode === 'add');
-      document.getElementById('btn-delete').classList.toggle('active', mode === 'delete');
-
+      const modeBtn = document.getElementById('btn-mode');
+      const modeIcon = document.getElementById('mode-icon');
+      const modeLabel = document.getElementById('mode-label');
       const actionBtn = document.getElementById('action-btn');
       const actionIcon = document.getElementById('action-icon');
       const actionText = document.getElementById('action-text');
 
       if (mode === 'add') {
+        modeBtn.classList.remove('delete-mode');
         actionBtn.classList.remove('delete-mode');
+        modeIcon.innerText = '➕';
+        modeLabel.innerText = '配置';
         actionIcon.innerText = '🧱';
         actionText.innerText = '配置';
       } else {
+        modeBtn.classList.add('delete-mode');
         actionBtn.classList.add('delete-mode');
+        modeIcon.innerText = '🗑️';
+        modeLabel.innerText = '削除';
         actionIcon.innerText = '🗑️';
         actionText.innerText = '削除';
       }
     }
+
+    const blockTypeLabels = { '1x1': '1×1', '2x1': '2×1', '4x2': '4×2' };
 
     function selectBlockType(type, btn) {
       currentBlockType = type;
@@ -922,6 +1018,8 @@
       document.querySelectorAll('#block-picker .opt-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       updatePreviewMesh();
+      document.getElementById('block-type-label').innerText = blockTypeLabels[type] || type;
+      toggleMenu('');
     }
 
     function rotatePreview() {
@@ -929,6 +1027,7 @@
       snapOffsetX = 0;
       snapOffsetZ = 0;
       updatePreviewMesh();
+      triggerVibrate();
     }
 
     function setCameraView(view) {
@@ -937,7 +1036,7 @@
       if (view === 'top') { cameraTheta = 0; cameraPhi = 0.05; }
       if (view === 'iso') { cameraTheta = Math.PI / 4; cameraPhi = Math.PI / 3; }
       updateCameraPosition();
-      toggleMenu('camera-picker');
+      toggleMenu('');
     }
 
     function executeAction() {
