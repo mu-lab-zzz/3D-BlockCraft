@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>BLOCK CRAFT MOBILE - Dual Control Edition</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: #1a1a24;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    /* 🕹️ 左側 バーチャルパッド（ツールバーの上に配置） */
+    #joystick-zone {
+      position: absolute;
+      bottom: 80px;
+      left: 15px;
+      width: 100px;
+      height: 100px;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      touch-action: none;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #joystick-knob {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      border: 2px solid #fff;
+      border-radius: 50%;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      position: absolute;
+      pointer-events: none;
+      transition: transform 0.05s ease-out;
+    }
+    #joystick-label {
+      position: absolute;
+      top: -22px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 11px;
+      color: rgba(255,255,255,0.8);
+      font-weight: bold;
+      white-space: nowrap;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    }
+
+    /* 上部ステータス */
+    #top-bar {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .badge {
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: bold;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* 🔘 アクションボタン（画面右下・ツールバーの上に配置） */
+    #action-btn {
+      position: absolute;
+      bottom: 80px;
+      right: 15px;
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+      font-size: 12px;
+      font-weight: bold;
+      box-shadow: 0 8px 25px rgba(37, 99, 235, 0.5);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      z-index: 20;
+      transition: transform 0.1s ease;
+    }
+    #action-btn:active { transform: scale(0.9); }
+    #action-btn.delete-mode {
+      background: linear-gradient(135deg, #dc2626, #991b1b);
+      box-shadow: 0 8px 25px rgba(220, 38, 38, 0.5);
+    }
+    #action-btn span { font-size: 20px; line-height: 1; }
+
+    /* 下部UIツールバー */
+    #toolbar {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      padding: 6px 8px;
+      border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      max-width: 96vw;
+      overflow-x: auto;
+      z-index: 25;
+    }
+
+    .btn {
+      border: none;
+      background: #f0f0f5;
+      color: #333;
+      padding: 6px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      min-width: 46px;
+      transition: all 0.15s ease;
+    }
+    .btn:active { transform: scale(0.92); }
+    .btn.active { background: #2563eb; color: #fff; }
+    .btn-danger.active { background: #dc2626; color: #fff; }
+
+    /* サブメニュー（ツールバーのすぐ上に表示） */
+    .sub-menu {
+      position: absolute;
+      bottom: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      padding: 8px 12px;
+      border-radius: 16px;
+      z-index: 30;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    }
+    .color-swatch {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      cursor: pointer;
+    }
+    .color-swatch.active { transform: scale(1.25); border-color: #ffd700; }
+    .opt-btn {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .opt-btn.active { background: #2563eb; }
+
+    /* 作品管理メニューのスタイル */
+    #save-picker {
+      flex-direction: column;
+      width: 280px;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+    .save-input-group {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .save-input-group input {
+      flex: 1;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.3);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      font-size: 12px;
+    }
+    .save-input-group input::placeholder { color: #aaa; }
+    .save-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .save-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255,255,255,0.1);
+      padding: 6px 10px;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 12px;
+    }
+    .save-item-btns {
+      display: flex;
+      gap: 4px;
+    }
+    .save-item-btns button {
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: none;
+      font-size: 10px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .btn-load { background: #2563eb; color: #fff; }
+    .btn-del { background: #dc2626; color: #fff; }
+    .file-io-group {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+      border-top: 1px solid rgba(255,255,255,0.2);
+      padding-top: 6px;
+    }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <div id="canvas-container"></div>
+
+  <!-- 左側 バーチャルパッド (視点操作) -->
+  <div id="joystick-zone">
+    <div id="joystick-label">🎥 視点移動</div>
+    <div id="joystick-knob"></div>
+  </div>
+
+  <div id="top-bar">
+    <div class="badge">BLOCK CRAFT</div>
+    <div class="badge" id="block-count">ブロック数: 0</div>
+  </div>
+
+  <!-- アクション執行ボタン -->
+  <button id="action-btn" onclick="executeAction()">
+    <span id="action-icon">🧱</span>
+    <div id="action-text">配置</div>
+  </button>
+
+  <!-- ブロック種類選択 -->
+  <div id="block-picker" class="sub-menu">
+    <button class="opt-btn active" onclick="selectBlockType('1x1', this)">1x1</button>
+    <button class="opt-btn" onclick="selectBlockType('2x1', this)">2x1</button>
+    <button class="opt-btn" onclick="selectBlockType('4x2', this)">4x2</button>
+  </div>
+
+  <!-- 色選択 -->
+  <div id="color-picker" class="sub-menu"></div>
+
+  <!-- カメラ固定切替 -->
+  <div id="camera-picker" class="sub-menu">
+    <button class="opt-btn" onclick="setCameraView('front')">正面</button>
+    <button class="opt-btn" onclick="setCameraView('top')">真上</button>
+    <button class="opt-btn" onclick="setCameraView('iso')">斜め</button>
+  </div>
+
+  <!-- セーブ & ロード作品管理メニュー -->
+  <div id="save-picker" class="sub-menu">
+    <div class="save-input-group">
+      <input type="text" id="save-name-input" placeholder="作品名を入力...">
+      <button class="opt-btn" onclick="saveCurrentSlot()">保存</button>
+    </div>
+    <div class="save-list" id="save-list-container"></div>
+    <div class="file-io-group">
+      <button class="opt-btn" style="flex: 1;" onclick="exportAllSaves()">💾 出力</button>
+      <button class="opt-btn" style="flex: 1;" onclick="document.getElementById('import-file-input').click()">📂 読込</button>
+      <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importAllSaves(event)">
+    </div>
+  </div>
+
+  <!-- ツールバー -->
+  <div id="toolbar">
+    <button class="btn active" id="btn-add" onclick="setMode('add')"><span>➕</span>配置</button>
+    <button class="btn btn-danger" id="btn-delete" onclick="setMode('delete')"><span>🗑️</span>削除</button>
+    <button class="btn" onclick="toggleMenu('block-picker')"><span>🧱</span>種類</button>
+    <button class="btn" onclick="toggleMenu('color-picker')"><span>🎨</span>カラー</button>
+    <button class="btn" onclick="rotatePreview()"><span>🔄</span>回転</button>
+    <button class="btn" onclick="shiftSnapOffset()"><span>↔️</span>位置</button>
+    <button class="btn" onclick="undoLastAction()"><span>↩️</span>Undo</button>
+    <button class="btn" onclick="toggleMenu('save-picker')"><span>💾</span>作品</button>
+    <button class="btn" onclick="toggleMenu('camera-picker')"><span>🎥</span>視点</button>
+    <button class="btn" onclick="clearAllBlocks()"><span>💥</span>全消去</button>
+  </div>
+
+  <script>
+    // --- 🔊 音声・バイブ ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSound(type) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === 'place') {
+        osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.05);
+      } else if (type === 'delete') {
+        osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(60, audioCtx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.08);
+      }
+    }
+
+    function triggerVibrate() {
+      if (navigator.vibrate) navigator.vibrate(12);
+    }
+
+    // --- データ構造 ---
+    const occupiedGrid = new Map();
+    const blocksHistory = [];
+    const blockMeshes = [];
+
+    let mode = 'add'; 
+    let currentBlockType = '1x1';
+    let currentColor = 0xee2222;
+    let currentRotation = 0;
+    let snapOffsetX = 0;
+    let snapOffsetZ = 0;
+
+    const palette = [0xee2222, 0x2277ee, 0xffcc00, 0x22aa44, 0xffffff, 0x222222, 0x9933ee];
+
+    // --- Three.js セットアップ ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a24);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    
+    // カメラアングル（極座標管理）
+    let cameraRadius = 25;
+    let cameraTheta = Math.PI / 4;  // 方位角
+    let cameraPhi = Math.PI / 3;    // 仰角
+    const cameraTarget = new THREE.Vector3(0, 0, 0); // 注視点
+
+    function updateCameraPosition() {
+      camera.position.x = cameraTarget.x + cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta);
+      camera.position.y = cameraTarget.y + cameraRadius * Math.cos(cameraPhi);
+      camera.position.z = cameraTarget.z + cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+      camera.lookAt(cameraTarget);
+    }
+    updateCameraPosition();
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    container.appendChild(renderer.domElement);
+
+    // ライティング
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(25, 40, 25);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+
+    // 床 (50x50)
+    const GRID_SIZE = 50;
+    const planeGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
+    const planeMat = new THREE.MeshStandardMaterial({ color: 0x2b2d35, roughness: 0.8 });
+    const plane = new THREE.Mesh(planeGeo, planeMat);
+    plane.rotation.x = -Math.PI / 2;
+    plane.position.y = -0.001; // ブロック底面（y=0）との表示競合（めり込み・ちらつき）を防ぐため微修正
+    plane.receiveShadow = true;
+    scene.add(plane);
+
+    const gridHelper = new THREE.GridHelper(GRID_SIZE, GRID_SIZE, 0x555566, 0x333344);
+    gridHelper.position.y = 0;
+    scene.add(gridHelper);
+
+    // プレビュー変数
+    let previewMesh = createPreviewMesh();
+    scene.add(previewMesh);
+    let isCanPlace = false;
+    let targetOccupiedCells = [];
+    let hoveredGroup = null;
+
+    const raycaster = new THREE.Raycaster();
+    const mouseVector = new THREE.Vector2(-999, -999); // スワイプ検知座標
+
+    // --- ロジック関数 ---
+    function getBlockDimensions(type, rot = currentRotation) {
+      let w = 1, d = 1, h = 1;
+      if (type === '2x1') { w = 2; d = 1; }
+      if (type === '4x2') { w = 4; d = 2; }
+      if ((rot / 90) % 2 !== 0) {
+        const tmp = w; w = d; d = tmp;
+      }
+      return { w, d, h };
+    }
+
+    function getOccupiedCells(originX, originY, originZ, type, rot) {
+      const dim = getBlockDimensions(type, rot);
+      const cells = [];
+      for (let x = 0; x < dim.w; x++) {
+        for (let z = 0; z < dim.d; z++) {
+          for (let y = 0; y < dim.h; y++) {
+            cells.push(`${originX + x},${originY + y},${originZ + z}`);
+          }
+        }
+      }
+      return cells;
+    }
+
+    function canPlaceBlock(cells) {
+      for (let key of cells) {
+        const [x, y, z] = key.split(',').map(Number);
+        if (y < 0 || Math.abs(x) >= GRID_SIZE / 2 || Math.abs(z) >= GRID_SIZE / 2) return false;
+        if (occupiedGrid.has(key)) return false;
+      }
+      return true;
+    }
+
+    function createBlockMesh(type, color, rot) {
+      const dim = getBlockDimensions(type, rot);
+      const group = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(dim.w - 0.04, dim.h - 0.04, dim.d - 0.04), mat);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      body.position.set(dim.w / 2 - 0.5, dim.h / 2 - 0.5, dim.d / 2 - 0.5);
+      group.add(body);
+
+      const studGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12);
+      for (let x = 0; x < dim.w; x++) {
+        for (let z = 0; z < dim.d; z++) {
+          const stud = new THREE.Mesh(studGeo, mat);
+          stud.position.set(x, dim.h / 2 + 0.02, z);
+          stud.castShadow = true;
+          group.add(stud);
+        }
+      }
+      return group;
+    }
+
+    function createPreviewMesh() {
+      const dim = getBlockDimensions(currentBlockType, currentRotation);
+      const geo = new THREE.BoxGeometry(dim.w - 0.02, dim.h - 0.02, dim.d - 0.02);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
+      return new THREE.Mesh(geo, mat);
+    }
+
+    function updatePreviewMesh() {
+      scene.remove(previewMesh);
+      previewMesh = createPreviewMesh();
+      scene.add(previewMesh);
+    }
+
+    function shiftSnapOffset() {
+      const dim = getBlockDimensions(currentBlockType, currentRotation);
+      snapOffsetX = (snapOffsetX + 1) % dim.w;
+      if (snapOffsetX === 0) {
+        snapOffsetZ = (snapOffsetZ + 1) % dim.d;
+      }
+      triggerVibrate();
+    }
+
+    // --- 💾 セーブ・ロード・エクスポート/インポート機能 ---
+    function serializeCurrentState() {
+      return blocksHistory.map(item => {
+        const dim = getBlockDimensions(item.type, item.rot);
+        const originX = item.group.position.x;
+        const originY = item.group.position.y;
+        const originZ = item.group.position.z;
+        return {
+          type: item.type,
+          color: item.color,
+          rot: item.rot,
+          pos: [originX, originY, originZ]
+        };
+      });
+    }
+
+    function loadStateData(dataArray) {
+      clearAllBlocksSilent();
+      if (!Array.isArray(dataArray)) return;
+
+      dataArray.forEach(data => {
+        const type = data.type;
+        const color = data.color;
+        const rot = data.rot;
+        const [originX, originY, originZ] = data.pos;
+
+        const cells = getOccupiedCells(originX, originY, originZ, type, rot);
+        const group = createBlockMesh(type, color, rot);
+        group.position.set(originX, originY, originZ);
+        scene.add(group);
+
+        cells.forEach(key => occupiedGrid.set(key, group));
+
+        group.traverse(child => {
+          if (child.isMesh) {
+            child.userData.rootGroup = group;
+            blockMeshes.push(child);
+          }
+        });
+
+        blocksHistory.push({ group, cells, type, color, rot });
+      });
+
+      updateBlockCount();
+    }
+
+    function autoSave() {
+      try {
+        const state = serializeCurrentState();
+        localStorage.setItem('block_craft_autosave', JSON.stringify(state));
+      } catch (e) {
+        console.warn('AutoSave failed:', e);
+      }
+    }
+
+    function autoLoad() {
+      try {
+        const saved = localStorage.getItem('block_craft_autosave');
+        if (saved) {
+          loadStateData(JSON.parse(saved));
+        }
+      } catch (e) {
+        console.warn('AutoLoad failed:', e);
+      }
+    }
+
+    function getSavedSlots() {
+      try {
+        const saved = localStorage.getItem('block_craft_slots');
+        return saved ? JSON.parse(saved) : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function updateSaveListUI() {
+      const container = document.getElementById('save-list-container');
+      container.innerHTML = '';
+      const slots = getSavedSlots();
+      const keys = Object.keys(slots);
+
+      if (keys.length === 0) {
+        container.innerHTML = '<div style="color:#aaa; font-size:11px; text-align:center;">保存された作品はありません</div>';
+        return;
+      }
+
+      keys.forEach(name => {
+        const item = document.createElement('div');
+        item.className = 'save-item';
+        item.innerHTML = `
+          <span>${name}</span>
+          <div class="save-item-btns">
+            <button class="btn-load" onclick="loadSlot('${name}')">開く</button>
+            <button class="btn-del" onclick="deleteSlot('${name}')">削除</button>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function saveCurrentSlot() {
+      const input = document.getElementById('save-name-input');
+      const name = input.value.trim();
+      if (!name) {
+        alert('作品名を入力してください');
+        return;
+      }
+      const slots = getSavedSlots();
+      slots[name] = serializeCurrentState();
+      localStorage.setItem('block_craft_slots', JSON.stringify(slots));
+      input.value = '';
+      updateSaveListUI();
+      triggerVibrate();
+    }
+
+    function loadSlot(name) {
+      const slots = getSavedSlots();
+      if (slots[name]) {
+        loadStateData(slots[name]);
+        autoSave();
+        triggerVibrate();
+      }
+    }
+
+    function deleteSlot(name) {
+      if (confirm(`作品「${name}」を削除しますか？`)) {
+        const slots = getSavedSlots();
+        delete slots[name];
+        localStorage.setItem('block_craft_slots', JSON.stringify(slots));
+        updateSaveListUI();
+        triggerVibrate();
+      }
+    }
+
+    function exportAllSaves() {
+      const data = {
+        autosave: serializeCurrentState(),
+        slots: getSavedSlots()
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `block_craft_saves_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importAllSaves(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.slots) {
+            localStorage.setItem('block_craft_slots', JSON.stringify(data.slots));
+          }
+          if (data.autosave) {
+            loadStateData(data.autosave);
+            autoSave();
+          }
+          updateSaveListUI();
+          alert('インポートが完了しました');
+        } catch (err) {
+          alert('ファイルの読み込みに失敗しました');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // --- 🕹️ 左側バーチャルパッド（視点移動）制御 ---
+    const joystickZone = document.getElementById('joystick-zone');
+    const joystickKnob = document.getElementById('joystick-knob');
+    let isJoystickActive = false;
+    let joystickTouchId = null;
+    let joyVec = { x: 0, y: 0 };
+
+    joystickZone.addEventListener('pointerdown', (e) => {
+      isJoystickActive = true;
+      joystickTouchId = e.pointerId;
+      updateJoystick(e);
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (isJoystickActive && e.pointerId === joystickTouchId) {
+        updateJoystick(e);
+      }
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (isJoystickActive && e.pointerId === joystickTouchId) {
+        isJoystickActive = false;
+        joystickTouchId = null;
+        joyVec = { x: 0, y: 0 };
+        joystickKnob.style.transform = `translate(0px, 0px)`;
+      }
+    });
+
+    function updateJoystick(e) {
+      const rect = joystickZone.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      let dx = e.clientX - centerX;
+      let dy = e.clientY - centerY;
+      const dist = Math.hypot(dx, dy);
+      const maxDist = rect.width / 2 - 10;
+
+      if (dist > maxDist) {
+        dx = (dx / dist) * maxDist;
+        dy = (dy / dist) * maxDist;
+      }
+
+      joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+      joyVec.x = dx / maxDist; // -1.0 〜 1.0
+      joyVec.y = dy / maxDist;
+    }
+
+    // --- 🖐️ 画面タッチ（ズーム・パン・配置移動）制御 ---
+    const dom = renderer.domElement;
+    const activeTouches = new Map();
+    let initialPinchDistance = null;
+    let initialCameraRadius = null;
+    let lastPanCenter = null;
+
+    dom.addEventListener('pointerdown', (e) => {
+      activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activeTouches.size === 2) {
+        const points = Array.from(activeTouches.values());
+        initialPinchDistance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+        initialCameraRadius = cameraRadius;
+        lastPanCenter = {
+          x: (points[0].x + points[1].x) / 2,
+          y: (points[0].y + points[1].y) / 2
+        };
+      }
+    });
+
+    dom.addEventListener('pointermove', (e) => {
+      if (activeTouches.has(e.pointerId)) {
+        activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
+
+      // 2本指操作：ピンチイン・アウト（拡大縮小） & 2本指パン（カメラ位置移動）
+      if (activeTouches.size === 2) {
+        const points = Array.from(activeTouches.values());
+        
+        // 1. ピンチ拡大縮小
+        const currentDist = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+        if (initialPinchDistance && currentDist > 0) {
+          const factor = initialPinchDistance / currentDist;
+          cameraRadius = Math.max(5, Math.min(80, initialCameraRadius * factor));
+        }
+
+        // 2. 二本指パン（カメラ位置移動）
+        const currentPanCenter = {
+          x: (points[0].x + points[1].x) / 2,
+          y: (points[0].y + points[1].y) / 2
+        };
+        if (lastPanCenter) {
+          const dx = currentPanCenter.x - lastPanCenter.x;
+          const dy = currentPanCenter.y - lastPanCenter.y;
+
+          const panSpeed = cameraRadius * 0.0015;
+          const forward = new THREE.Vector3().subVectors(cameraTarget, camera.position);
+          forward.y = 0;
+          forward.normalize();
+
+          const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+          cameraTarget.addScaledVector(right, -dx * panSpeed);
+          cameraTarget.addScaledVector(forward, dy * panSpeed);
+        }
+        lastPanCenter = currentPanCenter;
+
+        updateCameraPosition();
+      }
+      // 1本指操作（視点パッド操作中でない場合）：レイキャスト位置検知
+      else if (activeTouches.size === 1 && !isJoystickActive) {
+        mouseVector.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouseVector.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      }
+    });
+
+    const handlePointerEnd = (e) => {
+      activeTouches.delete(e.pointerId);
+      if (activeTouches.size < 2) {
+        initialPinchDistance = null;
+        initialCameraRadius = null;
+        lastPanCenter = null;
+      }
+    };
+
+    dom.addEventListener('pointerup', handlePointerEnd);
+    dom.addEventListener('pointercancel', handlePointerEnd);
+
+    // マウスホイールでの拡大縮小サポート
+    dom.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      cameraRadius = Math.max(5, Math.min(80, cameraRadius + e.deltaY * 0.02));
+      updateCameraPosition();
+    }, { passive: false });
+
+    function updateRaycast() {
+      if (mouseVector.x === -999) return;
+
+      raycaster.setFromCamera(mouseVector, camera);
+      const intersects = raycaster.intersectObjects([plane, ...blockMeshes], true);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        const dim = getBlockDimensions(currentBlockType, currentRotation);
+
+        if (mode === 'add') {
+          hoveredGroup = null;
+          let originX, originY, originZ;
+
+          if (hit.object === plane) {
+            originX = Math.floor(hit.point.x - dim.w / 2 + 0.5);
+            originY = 0;
+            originZ = Math.floor(hit.point.z - dim.d / 2 + 0.5);
+          } else {
+            const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+            const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
+            
+            originX = Math.floor(p.x) - snapOffsetX;
+            originY = Math.max(0, Math.floor(p.y + 0.5));
+            originZ = Math.floor(p.z) - snapOffsetZ;
+          }
+
+          targetOccupiedCells = getOccupiedCells(originX, originY, originZ, currentBlockType, currentRotation);
+          isCanPlace = canPlaceBlock(targetOccupiedCells);
+
+          previewMesh.position.set(originX + dim.w / 2 - 0.5, originY + dim.h / 2 - 0.5, originZ + dim.d / 2 - 0.5);
+          previewMesh.material.color.setHex(isCanPlace ? 0x00ff00 : 0xff0000);
+          previewMesh.visible = true;
+        } 
+        else if (mode === 'delete') {
+          if (hit.object !== plane) {
+            hoveredGroup = hit.object.userData.rootGroup;
+            previewMesh.position.copy(hoveredGroup.position);
+            previewMesh.material.color.setHex(0xff0000);
+            previewMesh.visible = true;
+          } else {
+            hoveredGroup = null;
+            previewMesh.visible = false;
+          }
+        }
+      } else {
+        previewMesh.visible = false;
+        hoveredGroup = null;
+      }
+    }
+
+    // UI初期化
+    const colorPicker = document.getElementById('color-picker');
+    palette.forEach((col, idx) => {
+      const swatch = document.createElement('div');
+      swatch.className = `color-swatch ${idx === 0 ? 'active' : ''}`;
+      swatch.style.backgroundColor = '#' + col.toString(16).padStart(6, '0');
+      swatch.onclick = () => {
+        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+        swatch.classList.add('active');
+        currentColor = col;
+      };
+      colorPicker.appendChild(swatch);
+    });
+
+    function toggleMenu(id) {
+      document.querySelectorAll('.sub-menu').forEach(m => {
+        if (m.id === id) {
+          m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+          if (m.id === 'save-picker' && m.style.display === 'flex') {
+            updateSaveListUI();
+          }
+        } else {
+          m.style.display = 'none';
+        }
+      });
+    }
+
+    function setMode(m) {
+      mode = m;
+      document.getElementById('btn-add').classList.toggle('active', mode === 'add');
+      document.getElementById('btn-delete').classList.toggle('active', mode === 'delete');
+
+      const actionBtn = document.getElementById('action-btn');
+      const actionIcon = document.getElementById('action-icon');
+      const actionText = document.getElementById('action-text');
+
+      if (mode === 'add') {
+        actionBtn.classList.remove('delete-mode');
+        actionIcon.innerText = '🧱';
+        actionText.innerText = '配置';
+      } else {
+        actionBtn.classList.add('delete-mode');
+        actionIcon.innerText = '🗑️';
+        actionText.innerText = '削除';
+      }
+    }
+
+    function selectBlockType(type, btn) {
+      currentBlockType = type;
+      snapOffsetX = 0;
+      snapOffsetZ = 0;
+      document.querySelectorAll('#block-picker .opt-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      updatePreviewMesh();
+    }
+
+    function rotatePreview() {
+      currentRotation = (currentRotation + 90) % 360;
+      snapOffsetX = 0;
+      snapOffsetZ = 0;
+      updatePreviewMesh();
+    }
+
+    function setCameraView(view) {
+      cameraTarget.set(0, 0, 0);
+      if (view === 'front') { cameraTheta = 0; cameraPhi = Math.PI / 2.2; }
+      if (view === 'top') { cameraTheta = 0; cameraPhi = 0.05; }
+      if (view === 'iso') { cameraTheta = Math.PI / 4; cameraPhi = Math.PI / 3; }
+      updateCameraPosition();
+      toggleMenu('camera-picker');
+    }
+
+    function executeAction() {
+      if (mode === 'add') {
+        if (!isCanPlace || !previewMesh.visible) return;
+
+        const dim = getBlockDimensions(currentBlockType, currentRotation);
+        const group = createBlockMesh(currentBlockType, currentColor, currentRotation);
+        
+        const originX = previewMesh.position.x - dim.w / 2 + 0.5;
+        const originY = previewMesh.position.y - dim.h / 2 + 0.5;
+        const originZ = previewMesh.position.z - dim.d / 2 + 0.5;
+
+        group.position.set(originX, originY, originZ);
+        scene.add(group);
+
+        targetOccupiedCells.forEach(key => occupiedGrid.set(key, group));
+
+        group.traverse(child => {
+          if (child.isMesh) {
+            child.userData.rootGroup = group;
+            blockMeshes.push(child);
+          }
+        });
+
+        blocksHistory.push({ group, cells: [...targetOccupiedCells], type: currentBlockType, color: currentColor, rot: currentRotation });
+
+        playSound('place');
+        triggerVibrate();
+        updateBlockCount();
+        autoSave();
+      } 
+      else if (mode === 'delete') {
+        if (!hoveredGroup) return;
+
+        scene.remove(hoveredGroup);
+
+        for (let [key, val] of occupiedGrid.entries()) {
+          if (val === hoveredGroup) occupiedGrid.delete(key);
+        }
+
+        hoveredGroup.traverse(c => {
+          const idx = blockMeshes.indexOf(c);
+          if (idx > -1) blockMeshes.splice(idx, 1);
+        });
+
+        const hIdx = blocksHistory.findIndex(h => h.group === hoveredGroup);
+        if (hIdx > -1) blocksHistory.splice(hIdx, 1);
+
+        hoveredGroup = null;
+        previewMesh.visible = false;
+
+        playSound('delete');
+        triggerVibrate();
+        updateBlockCount();
+        autoSave();
+      }
+    }
+
+    function undoLastAction() {
+      if (blocksHistory.length === 0) return;
+      const last = blocksHistory.pop();
+      scene.remove(last.group);
+
+      last.cells.forEach(key => occupiedGrid.delete(key));
+      last.group.traverse(c => {
+        const idx = blockMeshes.indexOf(c);
+        if (idx > -1) blockMeshes.splice(idx, 1);
+      });
+
+      playSound('delete');
+      updateBlockCount();
+      autoSave();
+    }
+
+    function updateBlockCount() {
+      document.getElementById('block-count').innerText = `ブロック数: ${blocksHistory.length}`;
+    }
+
+    function clearAllBlocksSilent() {
+      blocksHistory.forEach(h => scene.remove(h.group));
+      blocksHistory.length = 0;
+      blockMeshes.length = 0;
+      occupiedGrid.clear();
+      updateBlockCount();
+    }
+
+    function clearAllBlocks() {
+      if (confirm('すべて消去しますか？')) {
+        clearAllBlocksSilent();
+        autoSave();
+      }
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // 起動時にオートセーブデータを読み込み
+    autoLoad();
+
+    // ループ処理
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // パッド操作時のカメラ更新
+      if (isJoystickActive) {
+        cameraTheta += joyVec.x * 0.04;
+        cameraPhi += joyVec.y * 0.03;
+        // 仰角制限（地面より下・真上を超えない）
+        cameraPhi = Math.max(0.05, Math.min(Math.PI / 2 - 0.05, cameraPhi));
+        updateCameraPosition();
+      }
+
+      updateRaycast();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
