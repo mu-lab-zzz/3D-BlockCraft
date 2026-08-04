@@ -3,7 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>BLOCK CRAFT MOBILE - Dual Control Edition</title>
+  <title>BLOCK CRAFT 3D</title>
+  <meta name="description" content="3Dブロックで自由に作れるモバイル向けクラフトゲーム">
+  <meta name="theme-color" content="#1a1a24">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BlockCraft">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/favicon.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <style>
     * {
       box-sizing: border-box;
@@ -1049,6 +1058,13 @@
       renderer.render(scene, camera);
     }
     animate();
+
+    // PWA サービスワーカー登録
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js');
+      });
+    }
   </script>
 </body>
 </html>
