@@ -695,6 +695,7 @@
     let currentRotation = 0;
     let snapOffsetX = 0;
     let snapOffsetZ = 0;
+    let activeTilt = null; // 'z'|'x'|null  接続面に置くとき設定される
 
     // ===== FPS モード =====
     let gameMode = 'build';
@@ -818,8 +819,18 @@
       return `${w}×${d}${isPlate ? '薄' : ''}`;
     }
 
-    function getOccupiedCells(originX, originHY, originZ, type, rot) {
+    function getOccupiedCells(originX, originHY, originZ, type, rot, tilt) {
       if (type === 'wheel') return getWheelCells(originX, originHY, originZ, rot);
+      // 横倒し円柱: 実効高さ = 直径
+      if (tilt && isCylinderType(type)) {
+        const diameter = (type === 'cyl05' || type === 'cyl05p') ? 0.5 : 1.0;
+        const hCells = Math.max(1, Math.round(diameter * 2));
+        const cells = [];
+        for (let hy = 0; hy < hCells; hy++) {
+          cells.push(`${originX},${originHY + hy},${originZ}`);
+        }
+        return cells;
+      }
       const dim = getBlockDimensions(type, rot);
       const cells = [];
       const hCells = Math.round(dim.h * 2); // 半グリッド単位: 標準=2, 薄板=1
@@ -871,9 +882,9 @@
       return true;
     }
 
-    function createBlockMesh(type, color, rot) {
+    function createBlockMesh(type, color, rot, tilt) {
       if (type === 'wheel') return createWheelMesh(color, rot);
-      if (type === 'cyl' || type === 'cylp' || type === 'cyl05' || type === 'cyl05p') return createCylinderMesh(type, color);
+      if (isCylinderType(type)) return createCylinderMesh(type, color, tilt);
       if (type === 'connector') return createConnectorMesh(color, rot);
       const dim = getBlockDimensions(type, rot);
       const group = new THREE.Group();
@@ -954,7 +965,7 @@
       return group;
     }
 
-    function createCylinderMesh(type, color) {
+    function createCylinderMesh(type, color, tilt) {
       const group = new THREE.Group();
       const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
       const isHalf = type === 'cyl05' || type === 'cyl05p';
@@ -966,13 +977,17 @@
       body.castShadow = true;
       body.receiveShadow = true;
       body.position.set(0, h / 2, 0);
+      if (tilt === 'z') body.rotation.z = Math.PI / 2; // X方向に横倒し
+      if (tilt === 'x') body.rotation.x = Math.PI / 2; // Z方向に横倒し
       group.add(body);
 
-      const studR = isHalf ? 0.1 : 0.18;
-      const stud = new THREE.Mesh(new THREE.CylinderGeometry(studR, studR, 0.1, 12), mat);
-      stud.castShadow = true;
-      stud.position.set(0, h + 0.01, 0);
-      group.add(stud);
+      if (!tilt) {
+        const studR = isHalf ? 0.1 : 0.18;
+        const stud = new THREE.Mesh(new THREE.CylinderGeometry(studR, studR, 0.1, 12), mat);
+        stud.castShadow = true;
+        stud.position.set(0, h + 0.01, 0);
+        group.add(stud);
+      }
 
       return group;
     }
@@ -987,6 +1002,10 @@
       else if (rotSteps === 2) { axleX = -1; }
       else                     { axleZ = -1; }
 
+      group.userData.blockType = 'connector';
+      group.userData.axleX = axleX;
+      group.userData.axleZ = axleZ;
+
       const body = new THREE.Mesh(new THREE.BoxGeometry(0.99, 0.99, 0.99), mat);
       body.castShadow = true;
       body.receiveShadow = true;
@@ -998,19 +1017,21 @@
       stud.position.set(0, 1.02, 0);
       group.add(stud);
 
-      // face disc (visual connection marker)
+      // face disc (visual connection marker) — tagged as connector face
       const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.06, 16), mat);
       disc.position.set(axleX * 0.53, 0.5, axleZ * 0.53);
       if (axleX !== 0) disc.rotation.z = Math.PI / 2;
       else             disc.rotation.x = Math.PI / 2;
+      disc.userData.isConnectorFace = true;
       group.add(disc);
 
-      // central peg
+      // central peg — tagged as connector face
       const peg = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.35, 12), mat);
       peg.castShadow = true;
       peg.position.set(axleX * (0.5 + 0.175), 0.5, axleZ * (0.5 + 0.175));
       if (axleX !== 0) peg.rotation.z = Math.PI / 2;
       else             peg.rotation.x = Math.PI / 2;
+      peg.userData.isConnectorFace = true;
       group.add(peg);
 
       return group;
@@ -1018,9 +1039,8 @@
 
     function createPreviewMesh() {
       if (currentBlockType === 'wheel') return createWheelPreviewMesh(currentRotation);
-      if (currentBlockType === 'cyl' || currentBlockType === 'cylp' ||
-          currentBlockType === 'cyl05' || currentBlockType === 'cyl05p') {
-        return createCylinderPreviewMesh(currentBlockType);
+      if (isCylinderType(currentBlockType)) {
+        return createCylinderPreviewMesh(currentBlockType, activeTilt);
       }
       if (currentBlockType === 'connector') return createConnectorPreviewMesh(currentRotation);
       const dim = getBlockDimensions(currentBlockType, currentRotation);
@@ -1029,13 +1049,16 @@
       return new THREE.Mesh(geo, mat);
     }
 
-    function createCylinderPreviewMesh(type) {
+    function createCylinderPreviewMesh(type, tilt) {
       const isHalf = type === 'cyl05' || type === 'cyl05p';
       const isThin = type === 'cylp'  || type === 'cyl05p';
       const radius = isHalf ? 0.245 : 0.49;
       const h = isThin ? 0.5 : 1.0;
       const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
-      return new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, h - 0.02, 16), mat);
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, h - 0.02, 16), mat);
+      if (tilt === 'z') mesh.rotation.z = Math.PI / 2;
+      if (tilt === 'x') mesh.rotation.x = Math.PI / 2;
+      return mesh;
     }
 
     function createConnectorPreviewMesh(rot) {
@@ -1130,15 +1153,12 @@
     // --- 💾 セーブ・ロード・エクスポート/インポート機能 ---
     function serializeCurrentState() {
       return blocksHistory.map(item => {
-        const dim = getBlockDimensions(item.type, item.rot);
-        const originX = item.group.position.x;
-        const originY = item.group.position.y;
-        const originZ = item.group.position.z;
         return {
           type: item.type,
           color: item.color,
           rot: item.rot,
-          pos: [originX, originY, originZ]
+          tilt: item.tilt || null,
+          pos: [item.group.position.x, item.group.position.y, item.group.position.z]
         };
       });
     }
@@ -1154,8 +1174,9 @@
         const [originX, worldY, originZ] = data.pos;
         const originHY = Math.round(worldY * 2); // world Y → 半グリッド整数
 
-        const cells = getOccupiedCells(originX, originHY, originZ, type, rot);
-        const group = createBlockMesh(type, color, rot);
+        const tilt = data.tilt || null;
+        const cells = getOccupiedCells(originX, originHY, originZ, type, rot, tilt);
+        const group = createBlockMesh(type, color, rot, tilt);
         group.position.set(originX, originHY * 0.5, originZ);
         scene.add(group);
 
@@ -1168,7 +1189,7 @@
           }
         });
 
-        blocksHistory.push({ group, cells, type, color, rot });
+        blocksHistory.push({ group, cells, type, color, rot, tilt });
       });
 
       updateBlockCount();
@@ -1463,6 +1484,33 @@
       updateCameraPosition();
     }, { passive: false });
 
+    function isCylinderType(type) {
+      return type === 'cyl' || type === 'cylp' || type === 'cyl05' || type === 'cyl05p';
+    }
+
+    // 接続面ヒット検出: ヒットリストの先頭3件からコネクターブロックの接続面を探す
+    function detectConnectorFace(intersects) {
+      const limit = Math.min(intersects.length, 3);
+      for (let i = 0; i < limit; i++) {
+        const hit = intersects[i];
+        if (hit.object === plane) continue;
+        const grp = hit.object.parent;
+        if (!grp || grp.userData.blockType !== 'connector') continue;
+
+        // disc/pegメッシュ直接ヒット
+        if (hit.object.userData.isConnectorFace) {
+          return { axleX: grp.userData.axleX, axleZ: grp.userData.axleZ, group: grp };
+        }
+        // ボディ面法線チェック
+        const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+        const ax = grp.userData.axleX || 0, az = grp.userData.axleZ || 0;
+        if (norm.x * ax + norm.z * az > 0.5) {
+          return { axleX: ax, axleZ: az, group: grp };
+        }
+      }
+      return null;
+    }
+
     function updateRaycast() {
       if (mouseVector.x === -999) return;
 
@@ -1477,27 +1525,45 @@
           hoveredGroup = null;
           let originX, originY, originZ;
 
-          if (hit.object === plane) {
+          // 接続面ヒット検出
+          const connFace = detectConnectorFace(intersects);
+          const newTilt = (connFace && isCylinderType(currentBlockType))
+            ? (connFace.axleX !== 0 ? 'z' : 'x')
+            : null;
+          if (newTilt !== activeTilt) {
+            activeTilt = newTilt;
+            updatePreviewMesh();
+          }
+
+          if (connFace) {
+            // 接続面の隣に配置
+            const cx = Math.round(connFace.group.position.x);
+            const chy = Math.round(connFace.group.position.y * 2);
+            const cz = Math.round(connFace.group.position.z);
+            originX = cx + connFace.axleX;
+            originY = chy;
+            originZ = cz + connFace.axleZ;
+          } else if (hit.object === plane) {
             originX = Math.floor(hit.point.x - dim.w / 2 + 0.5);
             originY = 0;
             originZ = Math.floor(hit.point.z - dim.d / 2 + 0.5);
           } else {
             const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
             const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
-
             originX = Math.floor(p.x) - snapOffsetX;
             originY = Math.max(0, Math.round(hit.point.y * 2)); // 半グリッド単位
             originZ = Math.floor(p.z) - snapOffsetZ;
           }
 
-          targetOccupiedCells = getOccupiedCells(originX, originY, originZ, currentBlockType, currentRotation);
+          targetOccupiedCells = getOccupiedCells(originX, originY, originZ, currentBlockType, currentRotation, activeTilt);
           isCanPlace = canPlaceBlock(targetOccupiedCells);
 
           previewMesh.position.set(originX + dim.w / 2 - 0.5, originY * 0.5 + dim.h / 2, originZ + dim.d / 2 - 0.5);
           previewMesh.material.color.setHex(isCanPlace ? 0x00ff00 : 0xff0000);
           previewMesh.visible = true;
-        } 
+        }
         else if (mode === 'delete') {
+          if (activeTilt !== null) { activeTilt = null; }
           if (hit.object !== plane) {
             hoveredGroup = hit.object.userData.rootGroup;
             previewMesh.position.copy(hoveredGroup.position);
@@ -1509,6 +1575,7 @@
           }
         }
       } else {
+        if (activeTilt !== null) { activeTilt = null; updatePreviewMesh(); }
         previewMesh.visible = false;
         hoveredGroup = null;
       }
@@ -1646,6 +1713,7 @@
       currentBlockType = type;
       snapOffsetX = 0;
       snapOffsetZ = 0;
+      if (!isCylinderType(type)) activeTilt = null;
       document.querySelectorAll('#block-picker .opt-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       updatePreviewMesh();
@@ -1694,8 +1762,8 @@
         if (!isCanPlace || !previewMesh.visible) return;
 
         const dim = getBlockDimensions(currentBlockType, currentRotation);
-        const group = createBlockMesh(currentBlockType, currentColor, currentRotation);
-        
+        const group = createBlockMesh(currentBlockType, currentColor, currentRotation, activeTilt);
+
         const originX = previewMesh.position.x - dim.w / 2 + 0.5;
         const originY = previewMesh.position.y - dim.h / 2;
         const originZ = previewMesh.position.z - dim.d / 2 + 0.5;
@@ -1712,7 +1780,7 @@
           }
         });
 
-        blocksHistory.push({ group, cells: [...targetOccupiedCells], type: currentBlockType, color: currentColor, rot: currentRotation });
+        blocksHistory.push({ group, cells: [...targetOccupiedCells], type: currentBlockType, color: currentColor, rot: currentRotation, tilt: activeTilt });
 
         playSound('place');
         triggerVibrate();
@@ -1958,34 +2026,25 @@
           }
           hoveredGroup = null;
         } else {
-          hoveredGroup = hit.object.userData.rootGroup;
-          if (hoveredGroup) {
-            const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
-            // 法線を最近軸に丸めて整数グリッドシフト量を得る
-            const nx = Math.round(norm.x);
-            const ny = Math.round(norm.y);
-            const nz = Math.round(norm.z);
-            const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
-            let ox = Math.floor(p.x) - snapOffsetX;
-            let oy = Math.max(0, Math.round(hit.point.y * 2)); // 半グリッド単位
-            let oz = Math.floor(p.z) - snapOffsetZ;
+          // 接続面ヒット検出
+          const connFace = detectConnectorFace(hits);
+          const newTilt = (connFace && isCylinderType(currentBlockType))
+            ? (connFace.axleX !== 0 ? 'z' : 'x')
+            : null;
+          if (newTilt !== activeTilt) {
+            activeTilt = newTilt;
+            updatePreviewMesh();
+          }
 
-            targetOccupiedCells = getOccupiedCells(ox, oy, oz, currentBlockType, currentRotation);
+          if (connFace) {
+            const cx = Math.round(connFace.group.position.x);
+            const chy = Math.round(connFace.group.position.y * 2);
+            const cz = Math.round(connFace.group.position.z);
+            const ox = cx + connFace.axleX;
+            const oy = chy;
+            const oz = cz + connFace.axleZ;
+            targetOccupiedCells = getOccupiedCells(ox, oy, oz, currentBlockType, currentRotation, activeTilt);
             isCanPlace = canPlaceBlock(targetOccupiedCells);
-
-            // 重なる場合は法線方向に1半グリッドずらして再試行
-            if (!isCanPlace) {
-              const ox2 = ox + nx;
-              const oy2 = Math.max(0, oy + ny);
-              const oz2 = oz + nz;
-              const cells2 = getOccupiedCells(ox2, oy2, oz2, currentBlockType, currentRotation);
-              if (canPlaceBlock(cells2)) {
-                ox = ox2; oy = oy2; oz = oz2;
-                targetOccupiedCells = cells2;
-                isCanPlace = true;
-              }
-            }
-
             if (isCanPlace) {
               previewMesh.position.set(ox+dim.w/2-0.5, oy*0.5+dim.h/2, oz+dim.d/2-0.5);
               previewMesh.material.color.setHex(0x00ff88);
@@ -1993,9 +2052,44 @@
             } else {
               previewMesh.visible = false;
             }
+            hoveredGroup = null;
+          } else {
+            hoveredGroup = hit.object.userData.rootGroup;
+            if (hoveredGroup) {
+              const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+              const nx = Math.round(norm.x);
+              const ny = Math.round(norm.y);
+              const nz = Math.round(norm.z);
+              const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
+              let ox = Math.floor(p.x) - snapOffsetX;
+              let oy = Math.max(0, Math.round(hit.point.y * 2));
+              let oz = Math.floor(p.z) - snapOffsetZ;
+
+              targetOccupiedCells = getOccupiedCells(ox, oy, oz, currentBlockType, currentRotation, activeTilt);
+              isCanPlace = canPlaceBlock(targetOccupiedCells);
+
+              if (!isCanPlace) {
+                const ox2 = ox + nx, oy2 = Math.max(0, oy + ny), oz2 = oz + nz;
+                const cells2 = getOccupiedCells(ox2, oy2, oz2, currentBlockType, currentRotation, activeTilt);
+                if (canPlaceBlock(cells2)) {
+                  ox = ox2; oy = oy2; oz = oz2;
+                  targetOccupiedCells = cells2;
+                  isCanPlace = true;
+                }
+              }
+
+              if (isCanPlace) {
+                previewMesh.position.set(ox+dim.w/2-0.5, oy*0.5+dim.h/2, oz+dim.d/2-0.5);
+                previewMesh.material.color.setHex(0x00ff88);
+                previewMesh.visible = true;
+              } else {
+                previewMesh.visible = false;
+              }
+            }
           }
         }
       } else {
+        if (activeTilt !== null) { activeTilt = null; updatePreviewMesh(); }
         previewMesh.visible = false;
         hoveredGroup = null;
         isCanPlace = false;
@@ -2006,7 +2100,7 @@
     function executeFPSPlace() {
       if (!isCanPlace || !previewMesh.visible) return;
       const dim = getBlockDimensions(currentBlockType, currentRotation);
-      const group = createBlockMesh(currentBlockType, currentColor, currentRotation);
+      const group = createBlockMesh(currentBlockType, currentColor, currentRotation, activeTilt);
       const ox = previewMesh.position.x - dim.w/2 + 0.5;
       const oy = previewMesh.position.y - dim.h/2;
       const oz = previewMesh.position.z - dim.d/2 + 0.5;
@@ -2014,7 +2108,7 @@
       scene.add(group);
       targetOccupiedCells.forEach(k => occupiedGrid.set(k, group));
       group.traverse(c => { if (c.isMesh) { c.userData.rootGroup = group; blockMeshes.push(c); } });
-      blocksHistory.push({ group, cells: [...targetOccupiedCells], type: currentBlockType, color: currentColor, rot: currentRotation });
+      blocksHistory.push({ group, cells: [...targetOccupiedCells], type: currentBlockType, color: currentColor, rot: currentRotation, tilt: activeTilt });
       playSound('place'); triggerVibrate(); updateBlockCount(); autoSave();
     }
 
