@@ -539,10 +539,10 @@
   </div>
 
   <!-- 下降ボタン（飛行中のみ表示） -->
-  <button id="fly-down-btn" onclick="playerDescend()">⬇</button>
+  <button id="fly-down-btn">⬇</button>
 
-  <!-- ジャンプ（2連打で飛行切替） -->
-  <button id="jump-btn" onclick="playerJump()">⬆</button>
+  <!-- ジャンプ / 上昇ボタン -->
+  <button id="jump-btn">⬆</button>
 
   <!-- FPS アクション（タップ=配置 / 長押し=削除） -->
   <button id="fps-action-btn">
@@ -1453,33 +1453,15 @@
     }
 
     // ===== FPS: ジャンプ / 飛行 =====
-    let lastJumpTime = 0;
-    function playerJump() {
-      const now = Date.now();
-      if (now - lastJumpTime < 350) {
-        toggleFlyMode();
-      } else if (player.isFlying) {
-        player.vel.y = FLY_SPEED * 0.7;
-      } else if (player.onGround) {
-        player.vel.y = JUMP_FORCE;
-        player.onGround = false;
-      }
-      lastJumpTime = now;
-    }
+    let isFlyingUp = false, isFlyingDown = false;
 
     function toggleFlyMode() {
       player.isFlying = !player.isFlying;
-      if (player.isFlying) player.vel.y = 0;
+      if (player.isFlying) { player.vel.y = 0; isFlyingUp = false; isFlyingDown = false; }
       document.getElementById('fly-indicator').style.display = player.isFlying ? 'block' : 'none';
       document.getElementById('fly-down-btn').style.display = player.isFlying ? 'flex' : 'none';
       document.getElementById('btn-fly').classList.toggle('active', player.isFlying);
       triggerVibrate();
-    }
-
-    function playerDescend() {
-      if (player.isFlying) {
-        player.vel.y = -FLY_SPEED * 0.7;
-      }
     }
 
     // ===== FPS: 物理 =====
@@ -1501,8 +1483,9 @@
 
       // 重力 / 飛行
       if (player.isFlying) {
-        // vel.y はジャンプ/下降ボタンで設定; 毎フレーム減衰させてホバー
-        player.vel.y *= 0.85;
+        if (isFlyingUp)        player.vel.y =  FLY_SPEED;
+        else if (isFlyingDown) player.vel.y = -FLY_SPEED;
+        else                   player.vel.y *= 0.75; // ボタン離したらホバーへ減衰
       } else {
         player.vel.y += GRAVITY * dt;
         player.vel.y = Math.max(player.vel.y, -30);
@@ -1664,6 +1647,36 @@
       hoveredGroup = null; previewMesh.visible = false;
       playSound('delete'); triggerVibrate(); updateBlockCount(); autoSave();
     }
+
+    // ===== ジャンプ・上昇・下降ボタン =====
+    const jumpBtn     = document.getElementById('jump-btn');
+    const flyDownBtn  = document.getElementById('fly-down-btn');
+
+    // ⬆ ボタン: 非飛行=ジャンプ1回 / 飛行=長押しで連続上昇
+    jumpBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (player.isFlying) {
+        isFlyingUp = true;
+      } else if (player.onGround) {
+        player.vel.y = JUMP_FORCE;
+        player.onGround = false;
+        triggerVibrate();
+      }
+    });
+    const stopFlyUp = () => { isFlyingUp = false; };
+    jumpBtn.addEventListener('pointerup',     stopFlyUp);
+    jumpBtn.addEventListener('pointercancel', stopFlyUp);
+    jumpBtn.addEventListener('pointerleave',  stopFlyUp);
+
+    // ⬇ ボタン: 長押しで連続下降
+    flyDownBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      isFlyingDown = true;
+    });
+    const stopFlyDown = () => { isFlyingDown = false; };
+    flyDownBtn.addEventListener('pointerup',     stopFlyDown);
+    flyDownBtn.addEventListener('pointercancel', stopFlyDown);
+    flyDownBtn.addEventListener('pointerleave',  stopFlyDown);
 
     // FPSアクションボタン（タップ=配置・長押し=削除）
     const fpsActionBtn = document.getElementById('fps-action-btn');
