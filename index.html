@@ -1554,23 +1554,50 @@
           const oz = Math.floor(hit.point.z - dim.d/2 + 0.5);
           targetOccupiedCells = getOccupiedCells(ox, 0, oz, currentBlockType, currentRotation);
           isCanPlace = canPlaceBlock(targetOccupiedCells);
-          previewMesh.position.set(ox+dim.w/2-0.5, dim.h/2-0.5, oz+dim.d/2-0.5);
-          previewMesh.material.color.setHex(isCanPlace ? 0x00ff88 : 0xff3333);
-          previewMesh.visible = true;
+          if (isCanPlace) {
+            previewMesh.position.set(ox+dim.w/2-0.5, dim.h/2-0.5, oz+dim.d/2-0.5);
+            previewMesh.material.color.setHex(0x00ff88);
+            previewMesh.visible = true;
+          } else {
+            previewMesh.visible = false;
+          }
           hoveredGroup = null;
         } else {
           hoveredGroup = hit.object.userData.rootGroup;
           if (hoveredGroup) {
             const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
-            const p = hit.point.clone().add(norm.multiplyScalar(0.5));
-            const ox = Math.floor(p.x) - snapOffsetX;
-            const oy = Math.max(0, Math.floor(p.y + 0.5));
-            const oz = Math.floor(p.z) - snapOffsetZ;
+            // 法線を最近軸に丸めて整数グリッドシフト量を得る
+            const nx = Math.round(norm.x);
+            const ny = Math.round(norm.y);
+            const nz = Math.round(norm.z);
+            const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
+            let ox = Math.floor(p.x) - snapOffsetX;
+            let oy = Math.max(0, Math.floor(p.y + 0.5));
+            let oz = Math.floor(p.z) - snapOffsetZ;
+
             targetOccupiedCells = getOccupiedCells(ox, oy, oz, currentBlockType, currentRotation);
             isCanPlace = canPlaceBlock(targetOccupiedCells);
-            previewMesh.position.set(ox+dim.w/2-0.5, oy+dim.h/2-0.5, oz+dim.d/2-0.5);
-            previewMesh.material.color.setHex(isCanPlace ? 0x00ff88 : 0xff3333);
-            previewMesh.visible = true;
+
+            // 重なる場合は法線方向に1グリッドずらして再試行
+            if (!isCanPlace) {
+              const ox2 = ox + nx;
+              const oy2 = Math.max(0, oy + ny);
+              const oz2 = oz + nz;
+              const cells2 = getOccupiedCells(ox2, oy2, oz2, currentBlockType, currentRotation);
+              if (canPlaceBlock(cells2)) {
+                ox = ox2; oy = oy2; oz = oz2;
+                targetOccupiedCells = cells2;
+                isCanPlace = true;
+              }
+            }
+
+            if (isCanPlace) {
+              previewMesh.position.set(ox+dim.w/2-0.5, oy+dim.h/2-0.5, oz+dim.d/2-0.5);
+              previewMesh.material.color.setHex(0x00ff88);
+              previewMesh.visible = true;
+            } else {
+              previewMesh.visible = false;
+            }
           }
         }
       } else {
