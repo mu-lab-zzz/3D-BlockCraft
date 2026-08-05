@@ -373,33 +373,6 @@
       stroke-linecap: round;
     }
 
-    #right-joy-zone {
-      display: none;
-      position: absolute;
-      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 70px);
-      right: 100px;
-      width: 100px; height: 100px;
-      background: rgba(255,255,255,0.15);
-      backdrop-filter: blur(8px);
-      border: 2px solid rgba(255,255,255,0.3);
-      border-radius: 50%; touch-action: none;
-      z-index: 20; align-items: center; justify-content: center;
-    }
-    #right-joy-knob {
-      width: 40px; height: 40px;
-      background: linear-gradient(135deg, #9333ea, #7c3aed);
-      border: 2px solid #fff; border-radius: 50%;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-      position: absolute; pointer-events: none;
-    }
-    #right-joy-label {
-      position: absolute; top: -22px; left: 50%;
-      transform: translateX(-50%);
-      font-size: 11px; color: rgba(255,255,255,0.8);
-      font-weight: bold; white-space: nowrap;
-      pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-    }
-
     #jump-btn {
       display: none;
       position: absolute;
@@ -415,6 +388,22 @@
       z-index: 20; transition: transform 0.1s;
     }
     #jump-btn:active { transform: scale(0.9); }
+
+    #fly-down-btn {
+      display: none;
+      position: absolute;
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 230px);
+      right: 15px;
+      width: 56px; height: 56px; border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #ca8a04, #a16207);
+      color: #fff; font-size: 22px;
+      box-shadow: 0 6px 18px rgba(202,138,4,0.4);
+      cursor: pointer; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 20; transition: transform 0.1s;
+    }
+    #fly-down-btn:active { transform: scale(0.9); }
 
     #fps-action-btn {
       display: none;
@@ -520,11 +509,8 @@
     </div>
   </div>
 
-  <!-- 右ジョイスティック（視点） -->
-  <div id="right-joy-zone">
-    <div id="right-joy-label">👁 視点</div>
-    <div id="right-joy-knob"></div>
-  </div>
+  <!-- 下降ボタン（飛行中のみ表示） -->
+  <button id="fly-down-btn" onclick="playerDescend()">⬇</button>
 
   <!-- ジャンプ（2連打で飛行切替） -->
   <button id="jump-btn" onclick="playerJump()">⬆</button>
@@ -662,10 +648,9 @@
 
     let lastFPSTime = 0;
 
-    // 右ジョイスティック
-    let isRightJoyActive = false;
-    let rightJoyTouchId = null;
-    let rightJoyVec = { x: 0, y: 0 };
+    // FPSスワイプ視点
+    let fpsLookTouchId = null;
+    let fpsLookLastX = 0, fpsLookLastY = 0;
 
     // FPSアクション長押し
     let fpsLongPressTimer = null;
@@ -1032,40 +1017,34 @@
       joyVec.y = dy / maxDist;
     }
 
-    // --- 右ジョイスティック（FPS視点） ---
-    const rightJoyZone = document.getElementById('right-joy-zone');
-    const rightJoyKnob = document.getElementById('right-joy-knob');
-
-    rightJoyZone.addEventListener('pointerdown', (e) => {
-      isRightJoyActive = true;
-      rightJoyTouchId = e.pointerId;
-      updateRightJoy(e);
+    // --- FPSスワイプ視点（画面スワイプで yaw/pitch 操作）---
+    window.addEventListener('pointerdown', (e) => {
+      if (gameMode !== 'fps') return;
+      if (e.pointerId === joystickTouchId) return;
+      if (fpsLookTouchId !== null) return;
+      // ボタン・ジョイスティックゾーン上のタッチは除外
+      const t = e.target;
+      if (t.tagName === 'BUTTON' || t.id === 'joystick-zone' || t.id === 'joystick-knob') return;
+      fpsLookTouchId = e.pointerId;
+      fpsLookLastX = e.clientX;
+      fpsLookLastY = e.clientY;
     });
     window.addEventListener('pointermove', (e) => {
-      if (isRightJoyActive && e.pointerId === rightJoyTouchId) updateRightJoy(e);
+      if (gameMode !== 'fps' || e.pointerId !== fpsLookTouchId) return;
+      const dx = e.clientX - fpsLookLastX;
+      const dy = e.clientY - fpsLookLastY;
+      fpsLookLastX = e.clientX;
+      fpsLookLastY = e.clientY;
+      player.yaw   += dx * 0.003;
+      player.pitch += dy * 0.003;
+      player.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
     });
     window.addEventListener('pointerup', (e) => {
-      if (isRightJoyActive && e.pointerId === rightJoyTouchId) {
-        isRightJoyActive = false;
-        rightJoyTouchId = null;
-        rightJoyVec = { x: 0, y: 0 };
-        rightJoyKnob.style.transform = 'translate(0px,0px)';
-      }
+      if (e.pointerId === fpsLookTouchId) fpsLookTouchId = null;
     });
-
-    function updateRightJoy(e) {
-      const rect = rightJoyZone.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top  + rect.height / 2;
-      let dx = e.clientX - cx;
-      let dy = e.clientY - cy;
-      const dist = Math.hypot(dx, dy);
-      const max  = rect.width / 2 - 10;
-      if (dist > max) { dx = dx/dist*max; dy = dy/dist*max; }
-      rightJoyKnob.style.transform = `translate(${dx}px,${dy}px)`;
-      rightJoyVec.x = dx / max;
-      rightJoyVec.y = dy / max;
-    }
+    window.addEventListener('pointercancel', (e) => {
+      if (e.pointerId === fpsLookTouchId) fpsLookTouchId = null;
+    });
 
     // --- 🖐️ 画面タッチ（ズーム・パン・配置移動）制御 ---
     const dom = renderer.domElement;
@@ -1412,11 +1391,11 @@
       document.getElementById('toolbar').style.display = 'none';
       document.getElementById('action-btn').style.display = 'none';
       document.getElementById('fps-overlay').style.display = 'block';
-      document.getElementById('right-joy-zone').style.display = 'flex';
       document.getElementById('jump-btn').style.display = 'flex';
       document.getElementById('fps-action-btn').style.display = 'flex';
       document.getElementById('fps-toolbar').style.display = 'flex';
       document.getElementById('fly-indicator').style.display = 'none';
+      document.getElementById('fly-down-btn').style.display = 'none';
       document.getElementById('btn-fly').classList.remove('active');
       document.getElementById('mode-switch-btn').textContent = '🏗 建築モード';
       document.getElementById('mode-switch-btn').classList.add('fps-active');
@@ -1432,10 +1411,11 @@
       document.getElementById('toolbar').style.display = 'flex';
       document.getElementById('action-btn').style.display = 'flex';
       document.getElementById('fps-overlay').style.display = 'none';
-      document.getElementById('right-joy-zone').style.display = 'none';
       document.getElementById('jump-btn').style.display = 'none';
+      document.getElementById('fly-down-btn').style.display = 'none';
       document.getElementById('fps-action-btn').style.display = 'none';
       document.getElementById('fps-toolbar').style.display = 'none';
+      fpsLookTouchId = null;
       document.getElementById('mode-switch-btn').textContent = '🎮 FPSモード';
       document.getElementById('mode-switch-btn').classList.remove('fps-active');
       updateCameraPosition();
@@ -1460,8 +1440,15 @@
       player.isFlying = !player.isFlying;
       if (player.isFlying) player.vel.y = 0;
       document.getElementById('fly-indicator').style.display = player.isFlying ? 'block' : 'none';
+      document.getElementById('fly-down-btn').style.display = player.isFlying ? 'flex' : 'none';
       document.getElementById('btn-fly').classList.toggle('active', player.isFlying);
       triggerVibrate();
+    }
+
+    function playerDescend() {
+      if (player.isFlying) {
+        player.vel.y = -FLY_SPEED * 0.7;
+      }
     }
 
     // ===== FPS: 物理 =====
@@ -1483,7 +1470,8 @@
 
       // 重力 / 飛行
       if (player.isFlying) {
-        player.vel.y = -rightJoyVec.y * FLY_SPEED * 0.6;
+        // vel.y はジャンプ/下降ボタンで設定; 毎フレーム減衰させてホバー
+        player.vel.y *= 0.85;
       } else {
         player.vel.y += GRAVITY * dt;
         player.vel.y = Math.max(player.vel.y, -30);
@@ -1500,11 +1488,6 @@
       const half = GRID_SIZE / 2 - PLAYER_R;
       player.pos.x = Math.max(-half, Math.min(half, player.pos.x));
       player.pos.z = Math.max(-half, Math.min(half, player.pos.z));
-
-      // 視点（右ジョイスティック）
-      player.yaw   += rightJoyVec.x * 0.04;
-      player.pitch += rightJoyVec.y * 0.03;
-      player.pitch  = Math.max(-Math.PI/2 + 0.05, Math.min(Math.PI/2 - 0.05, player.pitch));
 
       // カメラ
       const eye = player.pos.clone().add(new THREE.Vector3(0, PLAYER_EYE, 0));
