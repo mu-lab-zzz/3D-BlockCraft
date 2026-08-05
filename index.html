@@ -1035,7 +1035,7 @@
       const dy = e.clientY - fpsLookLastY;
       fpsLookLastX = e.clientX;
       fpsLookLastY = e.clientY;
-      player.yaw   += dx * 0.003;
+      player.yaw   -= dx * 0.003;
       player.pitch += dy * 0.003;
       player.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
     });
