@@ -1673,10 +1673,26 @@
     }
     animate();
 
-    // PWA サービスワーカー登録
+    // PWA サービスワーカー登録 + 自動更新
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js');
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+          // 新しい SW が見つかったら即適用を要求
+          reg.addEventListener('updatefound', () => {
+            const newSW = reg.installing;
+            newSW.addEventListener('statechange', () => {
+              if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+                newSW.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          });
+          // 定期チェック（30秒ごとに sw.js が更新されていないか確認）
+          setInterval(() => reg.update(), 30000);
+        });
+        // SW が切り替わったらページをリロードして最新版を適用
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          window.location.reload();
+        });
       });
     }
   </script>
