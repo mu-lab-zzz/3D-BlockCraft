@@ -775,6 +775,7 @@
 
     // --- ロジック関数 ---
     function getBlockDimensions(type, rot = currentRotation) {
+      if (type === 'wheel') return { w: 1, d: 1, h: 1 };
       const isPlate = type.endsWith('p');
       const base = isPlate ? type.slice(0, -1) : type;
       const parts = base.split('x');
@@ -785,6 +786,7 @@
     }
 
     function blockLabel(type) {
+      if (type === 'wheel') return '車輪';
       const isPlate = type.endsWith('p');
       const base = isPlate ? type.slice(0, -1) : type;
       const [w, d] = base.split('x');
@@ -792,6 +794,7 @@
     }
 
     function getOccupiedCells(originX, originHY, originZ, type, rot) {
+      if (type === 'wheel') return getWheelCells(originX, originHY, originZ, rot);
       const dim = getBlockDimensions(type, rot);
       const cells = [];
       const hCells = Math.round(dim.h * 2); // 半グリッド単位: 標準=2, 薄板=1
@@ -800,6 +803,35 @@
           for (let hy = 0; hy < hCells; hy++) {
             cells.push(`${originX + x},${originHY + hy},${originZ + z}`);
           }
+        }
+      }
+      return cells;
+    }
+
+    function getWheelCells(originX, originHY, originZ, rot) {
+      const cells = [];
+      const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
+      let axleX = 0, axleZ = 0;
+      if      (rotSteps === 0) { axleX =  1; }
+      else if (rotSteps === 1) { axleZ =  1; }
+      else if (rotSteps === 2) { axleX = -1; }
+      else                     { axleZ = -1; }
+
+      // 本体: 半グリッド2セル(= 1フルユニット)
+      cells.push(`${originX},${originHY},${originZ}`);
+      cells.push(`${originX},${originHY+1},${originZ}`);
+
+      // 車輪: アクスル先端を中心に Y方向±1フルユニット × 垂直方向3列
+      // 各フルユニットY = 半グリッド2セル
+      const wx = originX + axleX;
+      const wz = originZ + axleZ;
+      for (let dy = -1; dy <= 1; dy++) {          // フルユニットYオフセット
+        const hy = originHY + dy * 2;              // 半グリッドY基点
+        for (let dp = -1; dp <= 1; dp++) {         // 垂直方向オフセット
+          const cx = axleX !== 0 ? wx : originX + dp;
+          const cz = axleZ !== 0 ? wz : originZ + dp;
+          cells.push(`${cx},${hy},${cz}`);
+          cells.push(`${cx},${hy+1},${cz}`);
         }
       }
       return cells;
@@ -815,6 +847,7 @@
     }
 
     function createBlockMesh(type, color, rot) {
+      if (type === 'wheel') return createWheelMesh(color, rot);
       const dim = getBlockDimensions(type, rot);
       const group = new THREE.Group();
       const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
@@ -834,6 +867,63 @@
           group.add(stud);
         }
       }
+      return group;
+    }
+
+    function createWheelMesh(color, rot) {
+      const group = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+      const tireMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.95 });
+
+      const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
+      let axleX = 0, axleZ = 0;
+      if      (rotSteps === 0) { axleX =  1; }
+      else if (rotSteps === 1) { axleZ =  1; }
+      else if (rotSteps === 2) { axleX = -1; }
+      else                     { axleZ = -1; }
+
+      // 本体ブロック (1×1×1)
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.99, 0.99, 0.99), mat);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      body.position.set(0, 0.5, 0);
+      group.add(body);
+
+      // 本体上スタッド
+      const studGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12);
+      const stud = new THREE.Mesh(studGeo, mat);
+      stud.castShadow = true;
+      stud.position.set(0, 1.02, 0);
+      group.add(stud);
+
+      // アクスル (本体中心→車輪中心)
+      const axleGeo = new THREE.CylinderGeometry(0.1, 0.1, 1.0, 8);
+      const axleMesh = new THREE.Mesh(axleGeo, mat);
+      axleMesh.castShadow = true;
+      axleMesh.position.set(axleX * 0.5, 0.5, axleZ * 0.5);
+      if (axleX !== 0) axleMesh.rotation.z = Math.PI / 2;
+      else             axleMesh.rotation.x = Math.PI / 2;
+      group.add(axleMesh);
+
+      // タイヤ外周 (トーラス、黒)
+      const tireGeo = new THREE.TorusGeometry(0.95, 0.38, 8, 20);
+      const tire = new THREE.Mesh(tireGeo, tireMat);
+      tire.castShadow = true;
+      tire.position.set(axleX, 0.5, axleZ);
+      // Three.js TorusGeometry はデフォルトで X-Y平面 (Z軸がホール方向)
+      // アクスルがX方向の場合 → ホールをX軸方向にするため rotation.y = π/2
+      if (axleX !== 0) tire.rotation.y = Math.PI / 2;
+      group.add(tire);
+
+      // ホイールハブ (内側円板、ブロックカラー)
+      const rimGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.42, 12);
+      const rim = new THREE.Mesh(rimGeo, mat);
+      rim.castShadow = true;
+      rim.position.set(axleX, 0.5, axleZ);
+      if (axleX !== 0) rim.rotation.z = Math.PI / 2;
+      else             rim.rotation.x = Math.PI / 2;
+      group.add(rim);
+
       return group;
     }
 
@@ -1342,6 +1432,22 @@
         });
         picker.appendChild(grid);
       });
+
+      // 特殊ブロック
+      const specialTitle = document.createElement('div');
+      specialTitle.className = 'bp-section-title';
+      specialTitle.textContent = '⚙ 特殊ブロック';
+      picker.appendChild(specialTitle);
+
+      const specialGrid = document.createElement('div');
+      specialGrid.className = 'bp-grid';
+      const wheelBtn = document.createElement('button');
+      wheelBtn.className = 'opt-btn' + (currentBlockType === 'wheel' ? ' active' : '');
+      wheelBtn.textContent = '車輪';
+      wheelBtn.title = '車輪ブロック（高さ1以上に配置、回転でアクスル方向を変更）';
+      wheelBtn.addEventListener('click', () => selectBlockType('wheel', wheelBtn));
+      specialGrid.appendChild(wheelBtn);
+      picker.appendChild(specialGrid);
     }
 
     function selectBlockType(type, btn) {
