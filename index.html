@@ -1460,7 +1460,7 @@
       // 移動（左ジョイスティック → yaw基準）
       const speed = player.isFlying ? FLY_SPEED : WALK_SPEED;
       const fwd  = -joyVec.y;
-      const right =  joyVec.x;
+      const right = -joyVec.x;
       const cos = Math.cos(player.yaw), sin = Math.sin(player.yaw);
       const dx = (right * cos + fwd * sin) * speed * dt;
       const dz = (-right * sin + fwd * cos) * speed * dt;
