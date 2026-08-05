@@ -362,6 +362,22 @@
     #mode-switch-btn:active { transform: translateX(-50%) scale(0.95); }
     #mode-switch-btn.fps-active { background: rgba(37,99,235,0.8); border-color: rgba(99,179,237,0.4); }
 
+    #camera-view-btn {
+      position: absolute;
+      top: 12px; left: 12px;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px; font-weight: bold;
+      cursor: pointer; z-index: 30;
+      transition: background 0.2s, transform 0.1s;
+      white-space: nowrap;
+    }
+    #camera-view-btn:active { transform: scale(0.95); }
+
     #fps-overlay {
       display: none;
       position: absolute; inset: 0;
@@ -542,6 +558,9 @@
     </div>
   </div>
 
+  <!-- 視点ボタン（左上固定・建築モードのみ） -->
+  <button id="camera-view-btn" onclick="toggleMenu('camera-picker')">🎥 視点</button>
+
   <!-- モード切替（常時表示） -->
   <button id="mode-switch-btn" onclick="switchMode()">🎮 FPSモード</button>
 
@@ -626,7 +645,7 @@
 
     <!-- グループ3: 操作 -->
     <button class="btn" onclick="undoLastAction()"><span>↩️</span>Undo</button>
-    <button class="btn" onclick="toggleMenu('camera-picker')"><span>🎥</span>視点</button>
+    <button class="btn" id="btn-delete" onclick="setMode(mode==='delete'?'add':'delete')"><span>🗑️</span><div>削除</div></button>
 
     <div class="toolbar-sep"></div>
 
@@ -1423,9 +1442,11 @@
       const actionIcon = document.getElementById('action-icon');
       const actionText = document.getElementById('action-text');
 
+      const deleteBtn = document.getElementById('btn-delete');
       if (mode === 'add') {
         modeBtn.classList.remove('delete-mode');
         actionBtn.classList.remove('delete-mode');
+        if (deleteBtn) deleteBtn.classList.remove('delete-mode');
         modeIcon.innerText = '➕';
         modeLabel.innerText = '配置';
         actionIcon.innerText = '🧱';
@@ -1433,6 +1454,7 @@
       } else {
         modeBtn.classList.add('delete-mode');
         actionBtn.classList.add('delete-mode');
+        if (deleteBtn) deleteBtn.classList.add('delete-mode');
         modeIcon.innerText = '🗑️';
         modeLabel.innerText = '削除';
         actionIcon.innerText = '🗑️';
@@ -1632,6 +1654,7 @@
 
       document.getElementById('toolbar').style.display = 'none';
       document.getElementById('action-btn').style.display = 'none';
+      document.getElementById('camera-view-btn').style.display = 'none';
       document.getElementById('fps-overlay').style.display = 'block';
       document.getElementById('fps-edit-btns').style.display = 'flex';
       document.getElementById('jump-btn').style.display = 'flex';
@@ -1653,6 +1676,7 @@
 
       document.getElementById('toolbar').style.display = 'flex';
       document.getElementById('action-btn').style.display = 'flex';
+      document.getElementById('camera-view-btn').style.display = '';
       document.getElementById('fps-overlay').style.display = 'none';
       document.getElementById('fps-edit-btns').style.display = 'flex';
       document.getElementById('jump-btn').style.display = 'none';
