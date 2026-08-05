@@ -402,7 +402,7 @@
     }
 
     #fps-edit-btns {
-      display: none;
+      display: flex;
       position: absolute;
       bottom: calc(max(10px, env(safe-area-inset-bottom)) + 150px);
       right: 15px;
@@ -598,8 +598,6 @@
 
   <!-- その他メニュー -->
   <div id="more-menu" class="sub-menu">
-    <button class="opt-btn" onclick="rotatePreview(); toggleMenu('')">🔄 ブロックを回転</button>
-    <button class="opt-btn" onclick="shiftSnapOffset()">↔️ 配置位置を調整</button>
     <button class="opt-btn" onclick="toggleMenu('save-picker')">💾 作品を管理</button>
     <button class="opt-btn danger" onclick="toggleMenu(''); clearAllBlocks()">💥 全消去</button>
   </div>
@@ -1656,7 +1654,7 @@
       document.getElementById('toolbar').style.display = 'flex';
       document.getElementById('action-btn').style.display = 'flex';
       document.getElementById('fps-overlay').style.display = 'none';
-      document.getElementById('fps-edit-btns').style.display = 'none';
+      document.getElementById('fps-edit-btns').style.display = 'flex';
       document.getElementById('jump-btn').style.display = 'none';
       document.getElementById('fly-down-btn').style.display = 'none';
       document.getElementById('fps-action-btn').style.display = 'none';
