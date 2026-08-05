@@ -559,7 +559,7 @@
   </div>
 
   <!-- 視点ボタン（左上固定・建築モードのみ） -->
-  <button id="camera-view-btn" onclick="toggleMenu('camera-picker')">🎥 視点</button>
+  <button id="camera-view-btn" onclick="cycleCameraView()">🎥 斜め</button>
 
   <!-- モード切替（常時表示） -->
   <button id="mode-switch-btn" onclick="switchMode()">🎮 FPSモード</button>
@@ -1536,6 +1536,10 @@
       triggerVibrate();
     }
 
+    const CAMERA_VIEWS = ['iso', 'front', 'top'];
+    const CAMERA_VIEW_LABELS = { iso: '🎥 斜め', front: '🎥 正面', top: '🎥 真上' };
+    let currentCameraViewIdx = 0;
+
     function setCameraView(view) {
       cameraTarget.set(0, 0, 0);
       if (view === 'front') { cameraTheta = 0; cameraPhi = Math.PI / 2.2; }
@@ -1543,6 +1547,15 @@
       if (view === 'iso') { cameraTheta = Math.PI / 4; cameraPhi = Math.PI / 3; }
       updateCameraPosition();
       toggleMenu('');
+      currentCameraViewIdx = CAMERA_VIEWS.indexOf(view);
+      if (currentCameraViewIdx < 0) currentCameraViewIdx = 0;
+      const btn = document.getElementById('camera-view-btn');
+      if (btn) btn.textContent = CAMERA_VIEW_LABELS[view];
+    }
+
+    function cycleCameraView() {
+      currentCameraViewIdx = (currentCameraViewIdx + 1) % CAMERA_VIEWS.length;
+      setCameraView(CAMERA_VIEWS[currentCameraViewIdx]);
     }
 
     function executeAction() {
