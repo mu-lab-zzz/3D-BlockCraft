@@ -373,10 +373,33 @@
       stroke-linecap: round;
     }
 
+    #fps-edit-btns {
+      display: none;
+      position: absolute;
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 150px);
+      right: 15px;
+      flex-direction: row;
+      gap: 6px;
+      z-index: 20;
+    }
+    .fps-edit-btn {
+      width: 48px; height: 48px; border-radius: 50%;
+      border: 1.5px solid rgba(255,255,255,0.35);
+      background: rgba(20,20,40,0.72);
+      backdrop-filter: blur(8px);
+      color: #fff; font-size: 20px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.1s;
+      touch-action: manipulation;
+    }
+    .fps-edit-btn:active { transform: scale(0.88); }
+
     #jump-btn {
       display: none;
       position: absolute;
-      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 160px);
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 212px);
       right: 15px;
       width: 56px; height: 56px; border-radius: 50%;
       border: none;
@@ -392,7 +415,7 @@
     #fly-down-btn {
       display: none;
       position: absolute;
-      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 230px);
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 282px);
       right: 15px;
       width: 56px; height: 56px; border-radius: 50%;
       border: none;
@@ -507,6 +530,12 @@
         <circle cx="28" cy="28" r="21"/>
       </svg>
     </div>
+  </div>
+
+  <!-- FPS 回転・位置ずらしボタン（配置ボタンの上） -->
+  <div id="fps-edit-btns">
+    <button class="fps-edit-btn" onclick="rotatePreview()" title="回転">🔄</button>
+    <button class="fps-edit-btn" onclick="shiftSnapOffset()" title="位置ずらし">↔️</button>
   </div>
 
   <!-- 下降ボタン（飛行中のみ表示） -->
@@ -1391,6 +1420,7 @@
       document.getElementById('toolbar').style.display = 'none';
       document.getElementById('action-btn').style.display = 'none';
       document.getElementById('fps-overlay').style.display = 'block';
+      document.getElementById('fps-edit-btns').style.display = 'flex';
       document.getElementById('jump-btn').style.display = 'flex';
       document.getElementById('fps-action-btn').style.display = 'flex';
       document.getElementById('fps-toolbar').style.display = 'flex';
@@ -1411,6 +1441,7 @@
       document.getElementById('toolbar').style.display = 'flex';
       document.getElementById('action-btn').style.display = 'flex';
       document.getElementById('fps-overlay').style.display = 'none';
+      document.getElementById('fps-edit-btns').style.display = 'none';
       document.getElementById('jump-btn').style.display = 'none';
       document.getElementById('fly-down-btn').style.display = 'none';
       document.getElementById('fps-action-btn').style.display = 'none';
