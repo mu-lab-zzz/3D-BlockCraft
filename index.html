@@ -791,14 +791,14 @@
       return `${w}×${d}${isPlate ? '薄' : ''}`;
     }
 
-    function getOccupiedCells(originX, originY, originZ, type, rot) {
+    function getOccupiedCells(originX, originHY, originZ, type, rot) {
       const dim = getBlockDimensions(type, rot);
       const cells = [];
-      const hCells = Math.ceil(dim.h); // 薄板(0.5)も1セル占有
+      const hCells = Math.round(dim.h * 2); // 半グリッド単位: 標準=2, 薄板=1
       for (let x = 0; x < dim.w; x++) {
         for (let z = 0; z < dim.d; z++) {
-          for (let y = 0; y < hCells; y++) {
-            cells.push(`${originX + x},${originY + y},${originZ + z}`);
+          for (let hy = 0; hy < hCells; hy++) {
+            cells.push(`${originX + x},${originHY + hy},${originZ + z}`);
           }
         }
       }
@@ -883,11 +883,12 @@
         const type = data.type;
         const color = data.color;
         const rot = data.rot;
-        const [originX, originY, originZ] = data.pos;
+        const [originX, worldY, originZ] = data.pos;
+        const originHY = Math.round(worldY * 2); // world Y → 半グリッド整数
 
-        const cells = getOccupiedCells(originX, originY, originZ, type, rot);
+        const cells = getOccupiedCells(originX, originHY, originZ, type, rot);
         const group = createBlockMesh(type, color, rot);
-        group.position.set(originX, originY, originZ);
+        group.position.set(originX, originHY * 0.5, originZ);
         scene.add(group);
 
         cells.forEach(key => occupiedGrid.set(key, group));
@@ -1215,16 +1216,16 @@
           } else {
             const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
             const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
-            
+
             originX = Math.floor(p.x) - snapOffsetX;
-            originY = Math.max(0, Math.floor(p.y + 0.5));
+            originY = Math.max(0, Math.round(hit.point.y * 2)); // 半グリッド単位
             originZ = Math.floor(p.z) - snapOffsetZ;
           }
 
           targetOccupiedCells = getOccupiedCells(originX, originY, originZ, currentBlockType, currentRotation);
           isCanPlace = canPlaceBlock(targetOccupiedCells);
 
-          previewMesh.position.set(originX + dim.w / 2 - 0.5, originY + dim.h / 2, originZ + dim.d / 2 - 0.5);
+          previewMesh.position.set(originX + dim.w / 2 - 0.5, originY * 0.5 + dim.h / 2, originZ + dim.d / 2 - 0.5);
           previewMesh.material.color.setHex(isCanPlace ? 0x00ff00 : 0xff0000);
           previewMesh.visible = true;
         } 
@@ -1586,20 +1587,20 @@
     function resolveCollision(axis) {
       const r = PLAYER_R, h = PLAYER_H;
       const x0 = Math.floor(player.pos.x - r) - 1, x1 = Math.floor(player.pos.x + r) + 1;
-      const y0 = Math.floor(player.pos.y)     - 1, y1 = Math.floor(player.pos.y + h) + 1;
+      const hy0 = Math.floor(player.pos.y * 2) - 1, hy1 = Math.floor((player.pos.y + h) * 2) + 1;
       const z0 = Math.floor(player.pos.z - r) - 1, z1 = Math.floor(player.pos.z + r) + 1;
 
       for (let bx = x0; bx <= x1; bx++) {
-        for (let by = y0; by <= y1; by++) {
+        for (let bhy = hy0; bhy <= hy1; bhy++) {
           for (let bz = z0; bz <= z1; bz++) {
-            if (!occupiedGrid.has(`${bx},${by},${bz}`)) continue;
+            if (!occupiedGrid.has(`${bx},${bhy},${bz}`)) continue;
             // プレイヤーAABB
             const pxMin = player.pos.x - r, pxMax = player.pos.x + r;
             const pyMin = player.pos.y,     pyMax = player.pos.y + h;
             const pzMin = player.pos.z - r, pzMax = player.pos.z + r;
-            // 重なり確認（全軸）
+            // 重なり確認（全軸）— Y軸は半グリッド(0.5単位)
             if (pxMax <= bx || pxMin >= bx+1) continue;
-            if (pyMax <= by || pyMin >= by+1) continue;
+            if (pyMax <= bhy*0.5 || pyMin >= (bhy+1)*0.5) continue;
             if (pzMax <= bz || pzMin >= bz+1) continue;
             // 軸別解決
             if (axis === 'x') {
@@ -1609,7 +1610,7 @@
               const pF = pzMax - bz, pB = (bz+1) - pzMin;
               if (pF < pB) player.pos.z -= pF; else player.pos.z += pB;
             } else {
-              const pUp = (by+1) - pyMin, pDn = pyMax - by;
+              const pUp = (bhy+1)*0.5 - pyMin, pDn = pyMax - bhy*0.5;
               if (pUp < pDn) {
                 player.pos.y += pUp; player.onGround = true;
                 if (player.vel.y < 0) player.vel.y = 0;
@@ -1653,13 +1654,13 @@
             const nz = Math.round(norm.z);
             const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
             let ox = Math.floor(p.x) - snapOffsetX;
-            let oy = Math.max(0, Math.floor(p.y + 0.5));
+            let oy = Math.max(0, Math.round(hit.point.y * 2)); // 半グリッド単位
             let oz = Math.floor(p.z) - snapOffsetZ;
 
             targetOccupiedCells = getOccupiedCells(ox, oy, oz, currentBlockType, currentRotation);
             isCanPlace = canPlaceBlock(targetOccupiedCells);
 
-            // 重なる場合は法線方向に1グリッドずらして再試行
+            // 重なる場合は法線方向に1半グリッドずらして再試行
             if (!isCanPlace) {
               const ox2 = ox + nx;
               const oy2 = Math.max(0, oy + ny);
@@ -1673,7 +1674,7 @@
             }
 
             if (isCanPlace) {
-              previewMesh.position.set(ox+dim.w/2-0.5, oy+dim.h/2, oz+dim.d/2-0.5);
+              previewMesh.position.set(ox+dim.w/2-0.5, oy*0.5+dim.h/2, oz+dim.d/2-0.5);
               previewMesh.material.color.setHex(0x00ff88);
               previewMesh.visible = true;
             } else {
