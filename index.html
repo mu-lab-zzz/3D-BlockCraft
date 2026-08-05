@@ -787,7 +787,7 @@
       const group = new THREE.Group();
       const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
 
-      const body = new THREE.Mesh(new THREE.BoxGeometry(dim.w - 0.04, dim.h - 0.04, dim.d - 0.04), mat);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(dim.w - 0.01, dim.h - 0.01, dim.d - 0.01), mat);
       body.castShadow = true;
       body.receiveShadow = true;
       body.position.set(dim.w / 2 - 0.5, dim.h / 2, dim.d / 2 - 0.5);
