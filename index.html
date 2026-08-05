@@ -793,6 +793,9 @@
     // --- ロジック関数 ---
     function getBlockDimensions(type, rot = currentRotation) {
       if (type === 'wheel') return { w: 1, d: 1, h: 1 };
+      if (type === 'cyl' || type === 'cyl05') return { w: 1, d: 1, h: 1 };
+      if (type === 'cylp' || type === 'cyl05p') return { w: 1, d: 1, h: 0.5 };
+      if (type === 'connector') return { w: 1, d: 1, h: 1 };
       const isPlate = type.endsWith('p');
       const base = isPlate ? type.slice(0, -1) : type;
       const parts = base.split('x');
@@ -803,7 +806,12 @@
     }
 
     function blockLabel(type) {
-      if (type === 'wheel') return 'タイヤ';
+      if (type === 'wheel')    return 'タイヤ';
+      if (type === 'cyl')     return '円柱';
+      if (type === 'cylp')    return '円柱薄';
+      if (type === 'cyl05')   return '細柱';
+      if (type === 'cyl05p')  return '細柱薄';
+      if (type === 'connector') return '接続面';
       const isPlate = type.endsWith('p');
       const base = isPlate ? type.slice(0, -1) : type;
       const [w, d] = base.split('x');
@@ -865,6 +873,8 @@
 
     function createBlockMesh(type, color, rot) {
       if (type === 'wheel') return createWheelMesh(color, rot);
+      if (type === 'cyl' || type === 'cylp' || type === 'cyl05' || type === 'cyl05p') return createCylinderMesh(type, color);
+      if (type === 'connector') return createConnectorMesh(color, rot);
       const dim = getBlockDimensions(type, rot);
       const group = new THREE.Group();
       const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
@@ -944,12 +954,122 @@
       return group;
     }
 
+    function createCylinderMesh(type, color) {
+      const group = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+      const isHalf = type === 'cyl05' || type === 'cyl05p';
+      const isThin = type === 'cylp'  || type === 'cyl05p';
+      const radius = isHalf ? 0.245 : 0.49;
+      const h = isThin ? 0.5 : 1.0;
+
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, h - 0.01, 16), mat);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      body.position.set(0, h / 2, 0);
+      group.add(body);
+
+      const studR = isHalf ? 0.1 : 0.18;
+      const stud = new THREE.Mesh(new THREE.CylinderGeometry(studR, studR, 0.1, 12), mat);
+      stud.castShadow = true;
+      stud.position.set(0, h + 0.01, 0);
+      group.add(stud);
+
+      return group;
+    }
+
+    function createConnectorMesh(color, rot) {
+      const group = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+      const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
+      let axleX = 0, axleZ = 0;
+      if      (rotSteps === 0) { axleX =  1; }
+      else if (rotSteps === 1) { axleZ =  1; }
+      else if (rotSteps === 2) { axleX = -1; }
+      else                     { axleZ = -1; }
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.99, 0.99, 0.99), mat);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      body.position.set(0, 0.5, 0);
+      group.add(body);
+
+      const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12), mat);
+      stud.castShadow = true;
+      stud.position.set(0, 1.02, 0);
+      group.add(stud);
+
+      // face disc (visual connection marker)
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.06, 16), mat);
+      disc.position.set(axleX * 0.53, 0.5, axleZ * 0.53);
+      if (axleX !== 0) disc.rotation.z = Math.PI / 2;
+      else             disc.rotation.x = Math.PI / 2;
+      group.add(disc);
+
+      // central peg
+      const peg = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.35, 12), mat);
+      peg.castShadow = true;
+      peg.position.set(axleX * (0.5 + 0.175), 0.5, axleZ * (0.5 + 0.175));
+      if (axleX !== 0) peg.rotation.z = Math.PI / 2;
+      else             peg.rotation.x = Math.PI / 2;
+      group.add(peg);
+
+      return group;
+    }
+
     function createPreviewMesh() {
       if (currentBlockType === 'wheel') return createWheelPreviewMesh(currentRotation);
+      if (currentBlockType === 'cyl' || currentBlockType === 'cylp' ||
+          currentBlockType === 'cyl05' || currentBlockType === 'cyl05p') {
+        return createCylinderPreviewMesh(currentBlockType);
+      }
+      if (currentBlockType === 'connector') return createConnectorPreviewMesh(currentRotation);
       const dim = getBlockDimensions(currentBlockType, currentRotation);
       const geo = new THREE.BoxGeometry(dim.w - 0.02, dim.h - 0.02, dim.d - 0.02);
       const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
       return new THREE.Mesh(geo, mat);
+    }
+
+    function createCylinderPreviewMesh(type) {
+      const isHalf = type === 'cyl05' || type === 'cyl05p';
+      const isThin = type === 'cylp'  || type === 'cyl05p';
+      const radius = isHalf ? 0.245 : 0.49;
+      const h = isThin ? 0.5 : 1.0;
+      const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
+      return new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, h - 0.02, 16), mat);
+    }
+
+    function createConnectorPreviewMesh(rot) {
+      const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
+      let axleX = 0, axleZ = 0;
+      if      (rotSteps === 0) { axleX =  1; }
+      else if (rotSteps === 1) { axleZ =  1; }
+      else if (rotSteps === 2) { axleX = -1; }
+      else                     { axleZ = -1; }
+
+      const mkMat = () => new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.45 });
+      const group = new THREE.Group();
+
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.97, 0.97, 0.97), mkMat());
+      group.add(base);
+
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.06, 16), mkMat());
+      disc.position.set(axleX * 0.53, 0, axleZ * 0.53);
+      if (axleX !== 0) disc.rotation.z = Math.PI / 2;
+      else             disc.rotation.x = Math.PI / 2;
+      group.add(disc);
+
+      const peg = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.35, 12), mkMat());
+      peg.position.set(axleX * 0.675, 0, axleZ * 0.675);
+      if (axleX !== 0) peg.rotation.z = Math.PI / 2;
+      else             peg.rotation.x = Math.PI / 2;
+      group.add(peg);
+
+      group.material = {
+        color: {
+          setHex: (hex) => group.traverse(c => { if (c.isMesh) c.material.color.setHex(hex); })
+        }
+      };
+      return group;
     }
 
     function createWheelPreviewMesh(rot) {
@@ -1502,12 +1622,23 @@
 
       const specialGrid = document.createElement('div');
       specialGrid.className = 'bp-grid';
-      const wheelBtn = document.createElement('button');
-      wheelBtn.className = 'opt-btn' + (currentBlockType === 'wheel' ? ' active' : '');
-      wheelBtn.textContent = 'タイヤ';
-      wheelBtn.title = 'タイヤブロック（高さ1以上に配置、回転でアクスル方向を変更）';
-      wheelBtn.addEventListener('click', () => selectBlockType('wheel', wheelBtn));
-      specialGrid.appendChild(wheelBtn);
+
+      const specialTypes = [
+        { type: 'wheel',    label: 'タイヤ',  title: '回転でアクスル方向を変更' },
+        { type: 'connector', label: '接続面', title: '回転で接続面の向きを変更' },
+        { type: 'cyl',      label: '円柱',   title: '直径1 高さ1の円柱' },
+        { type: 'cylp',     label: '円柱薄', title: '直径1 高さ0.5の円柱' },
+        { type: 'cyl05',    label: '細柱',   title: '直径0.5 高さ1の円柱' },
+        { type: 'cyl05p',   label: '細柱薄', title: '直径0.5 高さ0.5の円柱' },
+      ];
+      specialTypes.forEach(({ type, label, title }) => {
+        const btn = document.createElement('button');
+        btn.className = 'opt-btn' + (currentBlockType === type ? ' active' : '');
+        btn.textContent = label;
+        btn.title = title;
+        btn.addEventListener('click', () => selectBlockType(type, btn));
+        specialGrid.appendChild(btn);
+      });
       picker.appendChild(specialGrid);
     }
 
