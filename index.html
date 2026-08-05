@@ -786,7 +786,7 @@
     }
 
     function blockLabel(type) {
-      if (type === 'wheel') return '車輪';
+      if (type === 'wheel') return 'タイヤ';
       const isPlate = type.endsWith('p');
       const base = isPlate ? type.slice(0, -1) : type;
       const [w, d] = base.split('x');
@@ -928,10 +928,51 @@
     }
 
     function createPreviewMesh() {
+      if (currentBlockType === 'wheel') return createWheelPreviewMesh(currentRotation);
       const dim = getBlockDimensions(currentBlockType, currentRotation);
       const geo = new THREE.BoxGeometry(dim.w - 0.02, dim.h - 0.02, dim.d - 0.02);
       const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
       return new THREE.Mesh(geo, mat);
+    }
+
+    function createWheelPreviewMesh(rot) {
+      const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
+      let axleX = 0, axleZ = 0;
+      if      (rotSteps === 0) { axleX =  1; }
+      else if (rotSteps === 1) { axleZ =  1; }
+      else if (rotSteps === 2) { axleX = -1; }
+      else                     { axleZ = -1; }
+
+      const mkMat = () => new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.45 });
+
+      const group = new THREE.Group();
+
+      // 本体ボックス
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.97, 0.97, 0.97), mkMat());
+      base.position.set(0, 0.5, 0);
+      group.add(base);
+
+      // タイヤ (トーラス)
+      const tire = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.38, 8, 20), mkMat());
+      tire.position.set(axleX, 0.5, axleZ);
+      if (axleX !== 0) tire.rotation.y = Math.PI / 2;
+      group.add(tire);
+
+      // ハブ (円盤)
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.42, 12), mkMat());
+      hub.position.set(axleX, 0.5, axleZ);
+      if (axleX !== 0) hub.rotation.z = Math.PI / 2;
+      else             hub.rotation.x = Math.PI / 2;
+      group.add(hub);
+
+      // .material.color.setHex() の呼び出しを全子メッシュに委譲
+      group.material = {
+        color: {
+          setHex: (hex) => group.traverse(c => { if (c.isMesh) c.material.color.setHex(hex); })
+        }
+      };
+
+      return group;
     }
 
     function updatePreviewMesh() {
@@ -1443,8 +1484,8 @@
       specialGrid.className = 'bp-grid';
       const wheelBtn = document.createElement('button');
       wheelBtn.className = 'opt-btn' + (currentBlockType === 'wheel' ? ' active' : '');
-      wheelBtn.textContent = '車輪';
-      wheelBtn.title = '車輪ブロック（高さ1以上に配置、回転でアクスル方向を変更）';
+      wheelBtn.textContent = 'タイヤ';
+      wheelBtn.title = 'タイヤブロック（高さ1以上に配置、回転でアクスル方向を変更）';
       wheelBtn.addEventListener('click', () => selectBlockType('wheel', wheelBtn));
       specialGrid.appendChild(wheelBtn);
       picker.appendChild(specialGrid);
