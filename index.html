@@ -790,14 +790,14 @@
       const body = new THREE.Mesh(new THREE.BoxGeometry(dim.w - 0.04, dim.h - 0.04, dim.d - 0.04), mat);
       body.castShadow = true;
       body.receiveShadow = true;
-      body.position.set(dim.w / 2 - 0.5, dim.h / 2 - 0.5, dim.d / 2 - 0.5);
+      body.position.set(dim.w / 2 - 0.5, dim.h / 2, dim.d / 2 - 0.5);
       group.add(body);
 
       const studGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12);
       for (let x = 0; x < dim.w; x++) {
         for (let z = 0; z < dim.d; z++) {
           const stud = new THREE.Mesh(studGeo, mat);
-          stud.position.set(x, dim.h / 2 + 0.02, z);
+          stud.position.set(x, dim.h + 0.02, z);
           stud.castShadow = true;
           group.add(stud);
         }
@@ -1192,7 +1192,7 @@
           targetOccupiedCells = getOccupiedCells(originX, originY, originZ, currentBlockType, currentRotation);
           isCanPlace = canPlaceBlock(targetOccupiedCells);
 
-          previewMesh.position.set(originX + dim.w / 2 - 0.5, originY + dim.h / 2 - 0.5, originZ + dim.d / 2 - 0.5);
+          previewMesh.position.set(originX + dim.w / 2 - 0.5, originY + dim.h / 2, originZ + dim.d / 2 - 0.5);
           previewMesh.material.color.setHex(isCanPlace ? 0x00ff00 : 0xff0000);
           previewMesh.visible = true;
         } 
@@ -1318,7 +1318,7 @@
         const group = createBlockMesh(currentBlockType, currentColor, currentRotation);
         
         const originX = previewMesh.position.x - dim.w / 2 + 0.5;
-        const originY = previewMesh.position.y - dim.h / 2 + 0.5;
+        const originY = previewMesh.position.y - dim.h / 2;
         const originZ = previewMesh.position.z - dim.d / 2 + 0.5;
 
         group.position.set(originX, originY, originZ);
@@ -1569,7 +1569,7 @@
           targetOccupiedCells = getOccupiedCells(ox, 0, oz, currentBlockType, currentRotation);
           isCanPlace = canPlaceBlock(targetOccupiedCells);
           if (isCanPlace) {
-            previewMesh.position.set(ox+dim.w/2-0.5, dim.h/2-0.5, oz+dim.d/2-0.5);
+            previewMesh.position.set(ox+dim.w/2-0.5, dim.h/2, oz+dim.d/2-0.5);
             previewMesh.material.color.setHex(0x00ff88);
             previewMesh.visible = true;
           } else {
@@ -1606,7 +1606,7 @@
             }
 
             if (isCanPlace) {
-              previewMesh.position.set(ox+dim.w/2-0.5, oy+dim.h/2-0.5, oz+dim.d/2-0.5);
+              previewMesh.position.set(ox+dim.w/2-0.5, oy+dim.h/2, oz+dim.d/2-0.5);
               previewMesh.material.color.setHex(0x00ff88);
               previewMesh.visible = true;
             } else {
@@ -1627,7 +1627,7 @@
       const dim = getBlockDimensions(currentBlockType, currentRotation);
       const group = createBlockMesh(currentBlockType, currentColor, currentRotation);
       const ox = previewMesh.position.x - dim.w/2 + 0.5;
-      const oy = previewMesh.position.y - dim.h/2 + 0.5;
+      const oy = previewMesh.position.y - dim.h/2;
       const oz = previewMesh.position.z - dim.d/2 + 0.5;
       group.position.set(ox, oy, oz);
       scene.add(group);
