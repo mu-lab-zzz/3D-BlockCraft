@@ -1543,7 +1543,7 @@
     }
 
     function updateFPSRaycast(lookDir) {
-      const ray = new THREE.Raycaster(camera.position, lookDir.clone().normalize(), 0.1, 12);
+      const ray = new THREE.Raycaster(camera.position, lookDir.clone().normalize(), 0.1, 18);
       const hits = ray.intersectObjects([plane, ...blockMeshes], true);
 
       if (hits.length > 0) {
