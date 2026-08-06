@@ -755,7 +755,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06h · workshop</span>
+      <span class="footer-version">build 2026-08-06i · workshop</span>
     </div>
   </div>
 
@@ -1800,7 +1800,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function autoSave() {
       try {
         const state = serializeCurrentState();
-        localStorage.setItem('block_craft_autosave', JSON.stringify(state));
+        const key = survivalWorkshop ? 'block_craft_survival' : 'block_craft_autosave';
+        localStorage.setItem(key, JSON.stringify(state));
       } catch (e) {
         console.warn('AutoSave failed:', e);
       }
@@ -3470,11 +3471,24 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       el.classList.add('fadeout');
       setTimeout(() => {
         el.style.display = 'none';
-        // 床・グリッドを非表示にして全方向組立ワークショップへ
         plane.visible      = false;
         gridHelper.visible = false;
-        spawnWorkshopCockpit();
-        // enterSurvivalMode() は呼ばない: まずビルドモードで車両を組む
+        // 保存済み機体があれば復元、初回のみコクピット1個から開始
+        const savedSurvival = localStorage.getItem('block_craft_survival');
+        if (savedSurvival) {
+          try {
+            loadStateData(JSON.parse(savedSurvival));
+            cameraTarget.set(0, 2, 0);
+            cameraRadius = 15;
+            cameraPhi    = Math.PI / 3;
+            cameraTheta  = Math.PI / 4;
+            updateCameraPosition();
+          } catch (e) {
+            spawnWorkshopCockpit();
+          }
+        } else {
+          spawnWorkshopCockpit();
+        }
       }, 450);
     }
 
