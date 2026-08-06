@@ -755,7 +755,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06g · workshop</span>
+      <span class="footer-version">build 2026-08-06h · workshop</span>
     </div>
   </div>
 
@@ -1000,6 +1000,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let vehicleBlocksData = [];          // { group, origPos, origRotY }
     const vehicleCentroid = new THREE.Vector3();
     const vehicleState = { pos: new THREE.Vector3(), yaw: 0, speed: 0 };
+    const smoothedVehiclePos = new THREE.Vector3();
+    let survivalCamReady = false;
     let lastSurvivalTime = 0;
     let survivalCamTheta = Math.PI;      // π = 車両真後ろ
 
@@ -2649,6 +2651,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       vehicleState.yaw   = 0;
       vehicleState.speed = 0;
       survivalCamTheta   = Math.PI;
+      survivalCamReady   = false;
       lastSurvivalTime   = performance.now();
       survivalKeys.w = survivalKeys.s = survivalKeys.a = survivalKeys.d = false;
 
@@ -2797,15 +2800,29 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function updateSurvivalCamera() {
       const vp   = vehicleState.pos;
       const ang  = vehicleState.yaw + survivalCamTheta;
-      const camX = vp.x + Math.sin(ang) * SURVIVAL_CAM_DIST;
-      const camZ = vp.z + Math.cos(ang) * SURVIVAL_CAM_DIST;
       // 車体実 Y（物理時は chassisBody.position.y、キネマティック時は groundY+offset）
       const baseY = chassisBody
         ? chassisBody.position.y
         : getTerrainHeight(vp.x, vp.z) + WHEEL_GROUND_OFFSET + vehicleCentroid.y;
+
+      // 物理ジッタをカメラに伝えないようlerpでスムージング（初回はスナップ）
+      if (!survivalCamReady) {
+        smoothedVehiclePos.set(vp.x, baseY, vp.z);
+        survivalCamReady = true;
+      } else {
+        smoothedVehiclePos.x += (vp.x  - smoothedVehiclePos.x) * 0.12;
+        smoothedVehiclePos.y += (baseY  - smoothedVehiclePos.y) * 0.08;
+        smoothedVehiclePos.z += (vp.z  - smoothedVehiclePos.z) * 0.12;
+      }
+
+      const sx = smoothedVehiclePos.x;
+      const sy = smoothedVehiclePos.y;
+      const sz = smoothedVehiclePos.z;
+      const camX = sx + Math.sin(ang) * SURVIVAL_CAM_DIST;
+      const camZ = sz + Math.cos(ang) * SURVIVAL_CAM_DIST;
       const camFloor = getTerrainHeight(camX, camZ) + 2.5;
-      camera.position.set(camX, Math.max(baseY + SURVIVAL_CAM_H, camFloor), camZ);
-      camera.lookAt(vp.x, baseY + 1.8, vp.z);
+      camera.position.set(camX, Math.max(sy + SURVIVAL_CAM_H, camFloor), camZ);
+      camera.lookAt(sx, sy + 1.8, sz);
     }
 
     // 地形高さ関数（sin波の重ね合わせ、中心20単位は平坦）
