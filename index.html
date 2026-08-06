@@ -721,6 +721,164 @@
       letter-spacing: 0.1em;
       font-weight: 600;
     }
+    /* サバイバルオプションパネル */
+    #survival-options {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 9px;
+      width: 100%;
+      max-width: 340px;
+    }
+    .surv-opt-title {
+      font-size: 10px;
+      letter-spacing: 0.28em;
+      color: rgba(239,68,68,0.85);
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .surv-opt-btn {
+      width: 100%;
+      max-width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      text-align: left;
+      padding: 13px 18px;
+      border-radius: 16px;
+    }
+    .surv-opt-btn .mode-btn-icon { font-size: 22px; margin: 0; flex-shrink: 0; }
+    .surv-opt-btn .mode-btn-title { font-size: 13px; margin-bottom: 2px; }
+    .surv-opt-btn .mode-btn-desc { font-size: 10px; }
+    .surv-opt-btn:hover, .surv-opt-btn:focus {
+      background: rgba(239,68,68,0.18);
+      border-color: rgba(239,68,68,0.5);
+      transform: translateY(-2px);
+    }
+    #btn-surv-back {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.38);
+      font-size: 12px;
+      cursor: pointer;
+      padding: 8px 14px;
+      margin-top: 2px;
+      touch-action: manipulation;
+      letter-spacing: 0.05em;
+    }
+    #btn-surv-back:hover { color: rgba(255,255,255,0.65); }
+    #survival-load-slots {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    .surv-load-section-title {
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.3);
+      text-transform: uppercase;
+      font-weight: 600;
+      padding: 6px 2px 2px;
+    }
+    .surv-load-slot-btn {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255,255,255,0.055);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 8px 14px;
+      color: #fff;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: background 0.15s;
+    }
+    .surv-load-slot-btn:hover { background: rgba(239,68,68,0.16); border-color: rgba(239,68,68,0.4); }
+    .surv-load-name { font-size: 12px; font-weight: 700; }
+    .surv-load-date { font-size: 10px; color: rgba(255,255,255,0.38); }
+    /* サバイバルセーブ/ロード モーダル */
+    #survival-save-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 250;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(10px);
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px;
+    }
+    .surv-modal-inner {
+      background: rgba(12,16,26,0.98);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 22px;
+      padding: 20px;
+      width: 100%;
+      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.8);
+    }
+    .surv-modal-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: 0.04em;
+      text-align: center;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .surv-modal-save-row {
+      display: flex;
+      gap: 6px;
+    }
+    .surv-modal-save-row input {
+      flex: 1;
+      padding: 7px 10px;
+      border-radius: 9px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.07);
+      color: #fff;
+      font-size: 12px;
+    }
+    .surv-modal-save-row input::placeholder { color: #666; }
+    #surv-save-slot-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .surv-slot-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(255,255,255,0.055);
+      border-radius: 10px;
+      padding: 7px 10px;
+    }
+    .surv-slot-name { flex: 1; font-size: 12px; font-weight: 700; color: #fff; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .surv-slot-date { font-size: 10px; color: rgba(255,255,255,0.38); white-space: nowrap; flex-shrink: 0; }
+    .surv-slot-btns { display: flex; gap: 4px; flex-shrink: 0; }
+    .surv-slot-btns button { padding: 4px 8px; border-radius: 6px; border: none; font-size: 10px; font-weight: bold; cursor: pointer; }
+    #btn-surv-modal-close {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.55);
+      border-radius: 10px;
+      padding: 9px;
+      font-size: 12px;
+      cursor: pointer;
+      touch-action: manipulation;
+      margin-top: 2px;
+    }
+    #btn-surv-modal-close:hover { background: rgba(255,255,255,0.12); color: #fff; }
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -746,16 +904,31 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           <div class="mode-btn-title">クリエイティブ</div>
           <div class="mode-btn-desc">ブロックを自由に<br>組み立てよう</div>
         </button>
-        <button class="mode-btn" id="btn-survival" onclick="startSurvivalMode()">
+        <button class="mode-btn" id="btn-survival" onclick="showSurvivalOptions()">
           <span class="mode-btn-icon">⚔</span>
           <div class="mode-btn-title">サバイバル</div>
           <div class="mode-btn-desc">ビークルを操り<br>戦場へ飛び込め</div>
         </button>
       </div>
+
+      <!-- サバイバル開始オプション（サバイバルボタン押下後に表示） -->
+      <div id="survival-options">
+        <div class="surv-opt-title">⚔ サバイバル</div>
+        <button class="mode-btn surv-opt-btn" onclick="survivalNewGame()">
+          <span class="mode-btn-icon">🆕</span>
+          <div><div class="mode-btn-title">ニューゲーム</div><div class="mode-btn-desc">コクピット1個から始める</div></div>
+        </button>
+        <button class="mode-btn surv-opt-btn" id="btn-survival-continue" onclick="survivalContinue()">
+          <span class="mode-btn-icon">▶</span>
+          <div><div class="mode-btn-title">続きから</div><div class="mode-btn-desc">オートセーブを再開</div></div>
+        </button>
+        <div id="survival-load-slots"></div>
+        <button id="btn-surv-back" onclick="hideSurvivalOptions()">← 戻る</button>
+      </div>
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06i · workshop</span>
+      <span class="footer-version">build 2026-08-06j · workshop</span>
     </div>
   </div>
 
@@ -800,6 +973,19 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       <button class="opt-btn" style="flex: 1;" onclick="exportAllSaves()">💾 出力</button>
       <button class="opt-btn" style="flex: 1;" onclick="document.getElementById('import-file-input').click()">📂 読込</button>
       <input type="file" id="import-file-input" accept=".json" style="display:none" onchange="importAllSaves(event)">
+    </div>
+  </div>
+
+  <!-- サバイバルセーブ/ロード モーダル -->
+  <div id="survival-save-modal">
+    <div class="surv-modal-inner">
+      <div class="surv-modal-title">💾 ゲームをセーブ</div>
+      <div class="surv-modal-save-row">
+        <input type="text" id="surv-save-name-input" placeholder="セーブ名を入力...">
+        <button class="opt-btn" onclick="executeSurvivalSave()">保存</button>
+      </div>
+      <div id="surv-save-slot-list"></div>
+      <button id="btn-surv-modal-close" onclick="closeSurvivalSaveModal()">閉じる</button>
     </div>
   </div>
 
@@ -883,6 +1069,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   <!-- その他メニュー -->
   <div id="more-menu" class="sub-menu">
     <button class="opt-btn" onclick="toggleMenu(''); enterSurvivalMode()">⚔ サバイバル</button>
+    <button class="opt-btn" id="btn-surv-save-menu" style="display:none" onclick="toggleMenu(''); openSurvivalSaveModal()">💾 ゲームをセーブ</button>
     <button class="opt-btn" onclick="toggleMenu('save-picker')">💾 作品を管理</button>
     <button class="opt-btn danger" onclick="toggleMenu(''); clearAllBlocks()">💥 全消去</button>
   </div>
@@ -3456,6 +3643,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // ===== オープニング =====
     function startCreativeMode() {
       survivalWorkshop = false;
+      document.getElementById('btn-surv-save-menu').style.display = 'none';
       plane.visible      = true;
       gridHelper.visible = true;
       clearAllBlocksSilent();
@@ -3465,31 +3653,162 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       setTimeout(() => { el.style.display = 'none'; }, 450);
     }
 
-    function startSurvivalMode() {
+    // ===== サバイバル開始オプション =====
+    function showSurvivalOptions() {
+      const hasAutosave = !!localStorage.getItem('block_craft_survival');
+      document.getElementById('btn-survival-continue').style.display = hasAutosave ? '' : 'none';
+      renderSurvivalLoadSlots();
+      document.getElementById('opening-modes').style.display = 'none';
+      document.getElementById('survival-options').style.display = 'flex';
+    }
+
+    function hideSurvivalOptions() {
+      document.getElementById('survival-options').style.display = 'none';
+      document.getElementById('opening-modes').style.display = 'flex';
+    }
+
+    function _launchSurvivalWorkshop(loadFn) {
       survivalWorkshop = true;
+      document.getElementById('btn-surv-save-menu').style.display = '';
       const el = document.getElementById('opening-screen');
       el.classList.add('fadeout');
       setTimeout(() => {
         el.style.display = 'none';
         plane.visible      = false;
         gridHelper.visible = false;
-        // 保存済み機体があれば復元、初回のみコクピット1個から開始
-        const savedSurvival = localStorage.getItem('block_craft_survival');
-        if (savedSurvival) {
+        loadFn();
+      }, 450);
+    }
+
+    function survivalNewGame() {
+      localStorage.removeItem('block_craft_survival');
+      _launchSurvivalWorkshop(() => spawnWorkshopCockpit());
+    }
+
+    function survivalContinue() {
+      _launchSurvivalWorkshop(() => {
+        const saved = localStorage.getItem('block_craft_survival');
+        if (saved) {
           try {
-            loadStateData(JSON.parse(savedSurvival));
+            loadStateData(JSON.parse(saved));
             cameraTarget.set(0, 2, 0);
             cameraRadius = 15;
             cameraPhi    = Math.PI / 3;
             cameraTheta  = Math.PI / 4;
             updateCameraPosition();
-          } catch (e) {
-            spawnWorkshopCockpit();
-          }
+          } catch (e) { spawnWorkshopCockpit(); }
         } else {
           spawnWorkshopCockpit();
         }
-      }, 450);
+      });
+    }
+
+    function survivalLoadFromOpening(name) {
+      const slots = getSurvivalSlots();
+      const slot = slots[name];
+      if (!slot) return;
+      _launchSurvivalWorkshop(() => {
+        try {
+          loadStateData(slot.data);
+          autoSave();
+          cameraTarget.set(0, 2, 0);
+          cameraRadius = 15;
+          cameraPhi    = Math.PI / 3;
+          cameraTheta  = Math.PI / 4;
+          updateCameraPosition();
+        } catch (e) { spawnWorkshopCockpit(); }
+      });
+    }
+
+    // ===== サバイバルセーブ/ロード =====
+    function getSurvivalSlots() {
+      try {
+        const s = localStorage.getItem('block_craft_survival_slots');
+        return s ? JSON.parse(s) : {};
+      } catch (e) { return {}; }
+    }
+
+    function executeSurvivalSave() {
+      const input = document.getElementById('surv-save-name-input');
+      const name = input.value.trim();
+      if (!name) { input.focus(); return; }
+      try {
+        const slots = getSurvivalSlots();
+        slots[name] = { data: serializeCurrentState(), timestamp: Date.now() };
+        localStorage.setItem('block_craft_survival_slots', JSON.stringify(slots));
+        input.value = '';
+        renderSurvivalSaveModal();
+      } catch (e) { alert('セーブに失敗しました（ストレージ容量不足の可能性）'); }
+    }
+
+    function survivalLoadSlot(name) {
+      const slots = getSurvivalSlots();
+      const slot = slots[name];
+      if (!slot) return;
+      loadStateData(slot.data);
+      autoSave();
+      closeSurvivalSaveModal();
+    }
+
+    function survivalDeleteSlot(name) {
+      const slots = getSurvivalSlots();
+      delete slots[name];
+      localStorage.setItem('block_craft_survival_slots', JSON.stringify(slots));
+      renderSurvivalSaveModal();
+    }
+
+    function openSurvivalSaveModal() {
+      renderSurvivalSaveModal();
+      document.getElementById('survival-save-modal').style.display = 'flex';
+    }
+
+    function closeSurvivalSaveModal() {
+      document.getElementById('survival-save-modal').style.display = 'none';
+    }
+
+    function renderSurvivalSaveModal() {
+      const slots = getSurvivalSlots();
+      const container = document.getElementById('surv-save-slot-list');
+      const entries = Object.entries(slots).sort((a, b) => b[1].timestamp - a[1].timestamp);
+      if (entries.length === 0) {
+        container.innerHTML = '<div style="color:#777;font-size:11px;text-align:center;padding:8px 0">セーブデータなし</div>';
+        return;
+      }
+      container.innerHTML = '';
+      entries.forEach(([name, { timestamp }]) => {
+        const date = new Date(timestamp).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' });
+        const row = document.createElement('div');
+        row.className = 'surv-slot-item';
+        const safeN = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        row.innerHTML = `
+          <div class="surv-slot-name">${name}</div>
+          <div class="surv-slot-date">${date}</div>
+          <div class="surv-slot-btns">
+            <button class="btn-load" onclick="survivalLoadSlot('${safeN}')">ロード</button>
+            <button class="btn-del" onclick="survivalDeleteSlot('${safeN}')">削除</button>
+          </div>`;
+        container.appendChild(row);
+      });
+    }
+
+    function renderSurvivalLoadSlots() {
+      const slots = getSurvivalSlots();
+      const container = document.getElementById('survival-load-slots');
+      container.innerHTML = '';
+      const entries = Object.entries(slots).sort((a, b) => b[1].timestamp - a[1].timestamp);
+      if (entries.length === 0) return;
+      const title = document.createElement('div');
+      title.className = 'surv-load-section-title';
+      title.textContent = 'セーブデータ';
+      container.appendChild(title);
+      entries.forEach(([name, { timestamp }]) => {
+        const date = new Date(timestamp).toLocaleString('ja-JP', { dateStyle: 'short', timeStyle: 'short' });
+        const btn = document.createElement('button');
+        btn.className = 'surv-load-slot-btn';
+        btn.innerHTML = `<span class="surv-load-name">${name}</span><span class="surv-load-date">${date}</span>`;
+        btn.onclick = () => survivalLoadFromOpening(name);
+        container.appendChild(btn);
+      });
     }
 
     // ワークショップ開始: コクピット1個を空中に配置
