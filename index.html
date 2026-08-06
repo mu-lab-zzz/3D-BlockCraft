@@ -2688,6 +2688,7 @@
         // --- 物理同期 ---
         const bp = chassisBody.position;
         const bq = chassisBody.quaternion;
+        if (isNaN(bp.x) || isNaN(bp.y) || isNaN(bp.z)) return;
         const threeQ = new THREE.Quaternion(bq.x, bq.y, bq.z, bq.w);
         vehicleBlocksData.forEach(({ group, localPos, origRotY }) => {
           const rotated = localPos.clone().applyQuaternion(threeQ);
@@ -2749,7 +2750,7 @@
       const initY   = groundY + WHEEL_GROUND_OFFSET + vehicleCentroid.y;
 
       chassisBody = new CANNON.Body({ mass: 200, linearDamping: 0.05, angularDamping: 0.4 });
-      chassisBody.position.set(vehicleCentroid.x, initY + 1.0, vehicleCentroid.z); // 少し上から落下
+      chassisBody.position.set(vehicleCentroid.x, initY, vehicleCentroid.z);
 
       // 非タイヤブロックの AABB から chassis collision shape を生成
       const nonWheels = blocksHistory.filter(h => h.type !== 'wheel' && !isLargeWheelType(h.type));
@@ -2915,7 +2916,7 @@
           }
           rayVehicle.setBrake(Math.abs(gasInput) < 0.05 ? VEHICLE_BRAKE_FORCE : 0, i);
         }
-        physicsWorld.step(1 / 60, dt, 3);
+        try { physicsWorld.step(1 / 60, dt, 3); } catch(e) { console.error('physics step error:', e); }
 
         // HUD
         const vel = chassisBody.velocity;
