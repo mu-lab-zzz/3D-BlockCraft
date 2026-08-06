@@ -739,7 +739,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         </button>
       </div>
     </div>
-    <div id="opening-footer">Tap to start<br><span style="font-size:10px;opacity:.55">build 2026-08-06a · physics</span></div>
+    <div id="opening-footer">Tap to start<br><span style="font-size:10px;opacity:.55">build 2026-08-06b · workshop</span></div>
   </div>
 
   <!-- 左側 バーチャルパッド (視点操作) -->
@@ -999,6 +999,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     const VEHICLE_STEER_MAX    = 0.52;
     const VEHICLE_BRAKE_FORCE  = 40;
     let engineForcePerWheel    = VEHICLE_ENGINE_FORCE; // buildVehiclePhysics で質量比例に設定
+
+    // サバイバル・ワークショップ: TerraTech 式の空中組立
+    // タイヤはブロック底面より 2 半グリッド下まで占有するため、床(hy=0)には設置不可。
+    // サバイバルフローでは組立基準面を浮かせてタイヤの下部クリアランスを確保する。
+    let survivalWorkshop = false;              // サバイバル起動フローなら true
+    const WORKSHOP_FLOAT_HY = 4;               // 空中組立の基準面 (半グリッド単位 = 2.0 units)
 
     let terrainObjects = [];
     let terrainBuilt   = false;
@@ -2147,7 +2153,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
             originZ = cz + connFace.axleZ;
           } else if (hit.object === plane) {
             originX = Math.floor(hit.point.x - dim.w / 2 + 0.5);
-            originY = 0;
+            // ワークショップでは空中組立面に配置（タイヤ下部クリアランス確保）
+            originY = survivalWorkshop ? WORKSHOP_FLOAT_HY : 0;
             originZ = Math.floor(hit.point.z - dim.d / 2 + 0.5);
           } else {
             const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
@@ -3208,10 +3215,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         if (hit.object === plane) {
           const ox = Math.floor(hit.point.x - dim.w/2 + 0.5);
           const oz = Math.floor(hit.point.z - dim.d/2 + 0.5);
-          targetOccupiedCells = getOccupiedCells(ox, 0, oz, currentBlockType, currentRotation);
+          const oyBase = survivalWorkshop ? WORKSHOP_FLOAT_HY : 0;
+          targetOccupiedCells = getOccupiedCells(ox, oyBase, oz, currentBlockType, currentRotation);
           isCanPlace = canPlaceBlock(targetOccupiedCells);
           if (isCanPlace) {
-            previewMesh.position.set(ox+dim.w/2-0.5, dim.h/2, oz+dim.d/2-0.5);
+            previewMesh.position.set(ox+dim.w/2-0.5, oyBase*0.5+dim.h/2, oz+dim.d/2-0.5);
             previewMesh.material.color.setHex(0x00ff88);
             previewMesh.visible = true;
           } else {
@@ -3395,6 +3403,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // ループ処理
     // ===== オープニング =====
     function startCreativeMode() {
+      survivalWorkshop = false;  // クリエイティブは従来通り床面組立
       const el = document.getElementById('opening-screen');
       el.classList.add('fadeout');
       setTimeout(() => { el.style.display = 'none'; }, 450);
@@ -3402,6 +3411,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function startSurvivalMode() {
+      survivalWorkshop = true;   // ワークショップ = 空中組立（TerraTech 式）
       const el = document.getElementById('opening-screen');
       el.classList.add('fadeout');
       setTimeout(() => {
@@ -3428,11 +3438,13 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         { type: 'wheel',      color: 0x111111, rot:   0, tilt: null, x:  1, hy: 0, z: -2 }, // RR (axle → +X)
       ];
 
+      // ワークショップでは空中組立の基準面に浮かせる（タイヤの下部クリアランス確保）
+      const baseHY = survivalWorkshop ? WORKSHOP_FLOAT_HY : 0;
       defs.forEach(({ type, color, rot, tilt, x, hy, z }) => {
         const group = createBlockMesh(type, color, rot, tilt);
-        group.position.set(x, hy * 0.5, z);
+        group.position.set(x, (hy + baseHY) * 0.5, z);
         scene.add(group);
-        const cells = getOccupiedCells(x, hy, z, type, rot, tilt);
+        const cells = getOccupiedCells(x, hy + baseHY, z, type, rot, tilt);
         cells.forEach(k => occupiedGrid.set(k, group));
         group.traverse(c => {
           if (c.isMesh) { c.userData.rootGroup = group; blockMeshes.push(c); }
