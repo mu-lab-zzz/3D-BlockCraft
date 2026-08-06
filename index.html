@@ -948,7 +948,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06k · workshop</span>
+      <span class="footer-version">build 2026-08-06l · workshop</span>
     </div>
   </div>
 
@@ -1219,7 +1219,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     const VEHICLE_ACCEL      = 9;
     const VEHICLE_DECEL      = 7;
     const VEHICLE_TURN_SPEED = 2.0;
-    const SURVIVAL_CAM_DIST  = 20;
+    let   survivalCamDist    = 20;
     const SURVIVAL_CAM_H     = 7;
     const WHEEL_GROUND_OFFSET  = 0.83;  // タイヤ半径 - ハブY中心 (1.33 - 0.5)
     const TYRE_RADIUS          = 1.33;  // R + tubeR of the torus
@@ -2203,8 +2203,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         player.pitch += dy * 0.003;
         player.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
       } else {
-        // サバイバル: カメラ水平回転のみ
-        survivalCamTheta -= dx * 0.005;
+        // サバイバル: ピンチ中はカメラ回転をスキップ
+        if (!survivalPinching) survivalCamTheta -= dx * 0.005;
       }
     });
     window.addEventListener('pointerup', (e) => {
@@ -2220,17 +2220,26 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let initialPinchDistance = null;
     let initialCameraRadius = null;
     let lastPanCenter = null;
+    let survivalPinching = false;
+    let survivalInitialPinchDist = null;
+    let survivalInitialCamDist = null;
 
     dom.addEventListener('pointerdown', (e) => {
       activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (activeTouches.size === 2) {
         const points = Array.from(activeTouches.values());
-        initialPinchDistance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+        const dist = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+        initialPinchDistance = dist;
         initialCameraRadius = cameraRadius;
         lastPanCenter = {
           x: (points[0].x + points[1].x) / 2,
           y: (points[0].y + points[1].y) / 2
         };
+        if (gameMode === 'survival') {
+          survivalPinching = true;
+          survivalInitialPinchDist = dist;
+          survivalInitialCamDist = survivalCamDist;
+        }
       }
     });
 
@@ -2239,12 +2248,26 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       }
 
-      if (gameMode === 'fps' || gameMode === 'survival') return;
+      if (gameMode === 'fps') return;
 
+      // サバイバル走行中: 2本指ピンチズームのみ
+      if (gameMode === 'survival') {
+        if (activeTouches.size === 2 && survivalInitialPinchDist) {
+          const points = Array.from(activeTouches.values());
+          const currentDist = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+          if (currentDist > 0) {
+            const factor = survivalInitialPinchDist / currentDist;
+            survivalCamDist = Math.max(8, Math.min(60, survivalInitialCamDist * factor));
+          }
+        }
+        return;
+      }
+
+      // 以下ビルダーモード
       // 2本指操作：ピンチイン・アウト（拡大縮小） & 2本指パン（カメラ位置移動）
       if (activeTouches.size === 2) {
         const points = Array.from(activeTouches.values());
-        
+
         // 1. ピンチ拡大縮小
         const currentDist = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
         if (initialPinchDistance && currentDist > 0) {
@@ -2288,6 +2311,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         initialPinchDistance = null;
         initialCameraRadius = null;
         lastPanCenter = null;
+        survivalPinching = false;
+        survivalInitialPinchDist = null;
+        survivalInitialCamDist = null;
       }
     };
 
@@ -2297,8 +2323,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // マウスホイールでの拡大縮小サポート
     dom.addEventListener('wheel', (e) => {
       e.preventDefault();
-      cameraRadius = Math.max(5, Math.min(80, cameraRadius + e.deltaY * 0.02));
-      updateCameraPosition();
+      if (gameMode === 'survival') {
+        survivalCamDist = Math.max(8, Math.min(60, survivalCamDist + e.deltaY * 0.05));
+      } else {
+        cameraRadius = Math.max(5, Math.min(80, cameraRadius + e.deltaY * 0.02));
+        updateCameraPosition();
+      }
     }, { passive: false });
 
     function getLargeCylSize(type) {
@@ -3031,8 +3061,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const sx = smoothedVehiclePos.x;
       const sy = smoothedVehiclePos.y;
       const sz = smoothedVehiclePos.z;
-      const camX = sx + Math.sin(ang) * SURVIVAL_CAM_DIST;
-      const camZ = sz + Math.cos(ang) * SURVIVAL_CAM_DIST;
+      const camX = sx + Math.sin(ang) * survivalCamDist;
+      const camZ = sz + Math.cos(ang) * survivalCamDist;
       const camFloor = getTerrainHeight(camX, camZ) + 2.5;
       camera.position.set(camX, Math.max(sy + SURVIVAL_CAM_H, camFloor), camZ);
       camera.lookAt(sx, sy + 1.8, sz);
