@@ -755,7 +755,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06e · workshop</span>
+      <span class="footer-version">build 2026-08-06f · workshop</span>
     </div>
   </div>
 
@@ -1259,30 +1259,35 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function createBlockMesh(type, color, rot, tilt) {
-      if (type === 'wheel') return createWheelMesh(color, rot);
-      if (isLargeWheelType(type)) return createLargeWheelMesh(type, color, rot);
-      if (isCylinderType(type)) return createCylinderMesh(type, color, tilt);
-      if (type === 'connector') return createConnectorMesh(color, rot);
-      if (isCockpitType(type)) return createCockpitMesh(type, color, rot);
-      const dim = getBlockDimensions(type, rot);
-      const group = new THREE.Group();
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+      let group;
+      if (type === 'wheel')          group = createWheelMesh(color, rot);
+      else if (isLargeWheelType(type)) group = createLargeWheelMesh(type, color, rot);
+      else if (isCylinderType(type)) group = createCylinderMesh(type, color, tilt);
+      else if (type === 'connector') group = createConnectorMesh(color, rot);
+      else if (isCockpitType(type))  group = createCockpitMesh(type, color, rot);
+      else {
+        const dim = getBlockDimensions(type, rot);
+        group = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
 
-      const body = new THREE.Mesh(new THREE.BoxGeometry(dim.w - 0.01, dim.h - 0.01, dim.d - 0.01), mat);
-      body.castShadow = true;
-      body.receiveShadow = true;
-      body.position.set(dim.w / 2 - 0.5, dim.h / 2, dim.d / 2 - 0.5);
-      group.add(body);
+        const body = new THREE.Mesh(new THREE.BoxGeometry(dim.w - 0.01, dim.h - 0.01, dim.d - 0.01), mat);
+        body.castShadow = true;
+        body.receiveShadow = true;
+        body.position.set(dim.w / 2 - 0.5, dim.h / 2, dim.d / 2 - 0.5);
+        group.add(body);
 
-      const studGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12);
-      for (let x = 0; x < dim.w; x++) {
-        for (let z = 0; z < dim.d; z++) {
-          const stud = new THREE.Mesh(studGeo, mat);
-          stud.position.set(x, dim.h + 0.02, z);
-          stud.castShadow = true;
-          group.add(stud);
+        const studGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12);
+        for (let x = 0; x < dim.w; x++) {
+          for (let z = 0; z < dim.d; z++) {
+            const stud = new THREE.Mesh(studGeo, mat);
+            stud.position.set(x, dim.h + 0.02, z);
+            stud.castShadow = true;
+            group.add(stud);
+          }
         }
       }
+      // 全方向からレイキャストできるよう全面を両面描画にする
+      group.traverse(c => { if (c.isMesh && c.material) c.material.side = THREE.DoubleSide; });
       return group;
     }
 
@@ -2179,8 +2184,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
             const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
             const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
             originX = Math.floor(p.x) - snapOffsetX;
-            // workshopモードはy<0も許可（全方向建築）
-            originY = survivalWorkshop ? Math.round(hit.point.y * 2) : Math.max(0, Math.round(hit.point.y * 2));
+            // 下面ヒット(norm.y < 0)は新ブロック高さ分下にオフセット（重複回避）
+            const hh = Math.round(dim.h * 2);
+            let rawHY = Math.round(hit.point.y * 2);
+            if (norm.y < -0.5) rawHY -= hh;
+            originY = survivalWorkshop ? rawHY : Math.max(0, rawHY);
             originZ = Math.floor(p.z) - snapOffsetZ;
           }
 
@@ -3283,14 +3291,19 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
               const nz = Math.round(norm.z);
               const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
               let ox = Math.floor(p.x) - snapOffsetX;
-              let oy = Math.max(0, Math.round(hit.point.y * 2));
+              const fpsHH = Math.round(dim.h * 2);
+              let oy = Math.round(hit.point.y * 2);
+              if (norm.y < -0.5) oy -= fpsHH;
+              oy = survivalWorkshop ? oy : Math.max(0, oy);
               let oz = Math.floor(p.z) - snapOffsetZ;
 
               targetOccupiedCells = getOccupiedCells(ox, oy, oz, currentBlockType, currentRotation, activeTilt);
               isCanPlace = canPlaceBlock(targetOccupiedCells);
 
               if (!isCanPlace) {
-                const ox2 = ox + nx, oy2 = Math.max(0, oy + ny), oz2 = oz + nz;
+                const ox2 = ox + nx;
+                const oy2 = survivalWorkshop ? oy + ny : Math.max(0, oy + ny);
+                const oz2 = oz + nz;
                 const cells2 = getOccupiedCells(ox2, oy2, oz2, currentBlockType, currentRotation, activeTilt);
                 if (canPlaceBlock(cells2)) {
                   ox = ox2; oy = oy2; oz = oz2;
