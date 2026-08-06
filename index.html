@@ -755,7 +755,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06f · workshop</span>
+      <span class="footer-version">build 2026-08-06g · workshop</span>
     </div>
   </div>
 
@@ -2183,13 +2183,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           } else {
             const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
             const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
-            originX = Math.floor(p.x) - snapOffsetX;
+            // floor → round: 多セルブロック(2x2等)の+方向面でセルがずれる問題を修正
+            originX = Math.round(p.x) - snapOffsetX;
             // 下面ヒット(norm.y < 0)は新ブロック高さ分下にオフセット（重複回避）
             const hh = Math.round(dim.h * 2);
             let rawHY = Math.round(hit.point.y * 2);
             if (norm.y < -0.5) rawHY -= hh;
             originY = survivalWorkshop ? rawHY : Math.max(0, rawHY);
-            originZ = Math.floor(p.z) - snapOffsetZ;
+            originZ = Math.round(p.z) - snapOffsetZ;
           }
 
           targetOccupiedCells = getOccupiedCells(originX, originY, originZ, currentBlockType, currentRotation, activeTilt);
@@ -3290,12 +3291,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
               const ny = Math.round(norm.y);
               const nz = Math.round(norm.z);
               const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
-              let ox = Math.floor(p.x) - snapOffsetX;
+              let ox = Math.round(p.x) - snapOffsetX;
               const fpsHH = Math.round(dim.h * 2);
               let oy = Math.round(hit.point.y * 2);
               if (norm.y < -0.5) oy -= fpsHH;
               oy = survivalWorkshop ? oy : Math.max(0, oy);
-              let oz = Math.floor(p.z) - snapOffsetZ;
+              let oz = Math.round(p.z) - snapOffsetZ;
 
               targetOccupiedCells = getOccupiedCells(ox, oy, oz, currentBlockType, currentRotation, activeTilt);
               isCanPlace = canPlaceBlock(targetOccupiedCells);
