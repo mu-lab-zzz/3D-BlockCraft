@@ -506,6 +506,76 @@
       box-shadow: 0 10px 30px rgba(0,0,0,0.3);
       max-width: 96vw; z-index: 25;
     }
+
+    /* ===== サバイバルモード HUD ===== */
+    #survival-hud {
+      display: none;
+      position: absolute;
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 10px);
+      right: 15px;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      z-index: 20;
+      pointer-events: none;
+    }
+    #survival-exit-btn {
+      pointer-events: auto;
+      background: rgba(37,99,235,0.85);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      border: 1px solid rgba(99,179,237,0.4);
+      padding: 10px 22px;
+      border-radius: 22px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform 0.1s;
+      white-space: nowrap;
+    }
+    #survival-exit-btn:active { transform: scale(0.95); }
+    .survival-badge {
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 16px;
+      padding: 8px 18px;
+      text-align: center;
+      min-width: 76px;
+    }
+    .survival-num {
+      color: #fff;
+      font-size: 22px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .survival-badge-label {
+      color: rgba(255,255,255,0.45);
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-top: 3px;
+    }
+    #survival-hint {
+      display: none;
+      position: absolute;
+      top: 52px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
+      color: rgba(255,255,255,0.8);
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 5px 16px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: bold;
+      pointer-events: none;
+      z-index: 30;
+      white-space: nowrap;
+    }
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -615,8 +685,25 @@
     </button>
   </div>
 
+  <!-- サバイバル HUD -->
+  <div id="survival-hud">
+    <button id="survival-exit-btn" onclick="exitSurvivalMode()">🏗 組立へ</button>
+    <div class="survival-badge">
+      <div class="survival-num" id="survival-speed">0</div>
+      <div class="survival-badge-label">km/h</div>
+    </div>
+    <div class="survival-badge">
+      <div class="survival-num" id="survival-gear" style="color:#22c55e">D</div>
+      <div class="survival-badge-label">ギア</div>
+    </div>
+  </div>
+
+  <!-- サバイバルモード カメラ操作ヒント -->
+  <div id="survival-hint">⚔ サバイバルモード ｜ 右スワイプ: カメラ回転</div>
+
   <!-- その他メニュー -->
   <div id="more-menu" class="sub-menu">
+    <button class="opt-btn" onclick="toggleMenu(''); enterSurvivalMode()">⚔ サバイバル</button>
     <button class="opt-btn" onclick="toggleMenu('save-picker')">💾 作品を管理</button>
     <button class="opt-btn danger" onclick="toggleMenu(''); clearAllBlocks()">💥 全消去</button>
   </div>
@@ -730,6 +817,36 @@
     const LONG_PRESS_MS = 600;
     const RING_CIRC = 132;
 
+    // ===== サバイバルモード =====
+    let vehicleBlocksData = [];          // { group, origPos, origRotY }
+    const vehicleCentroid = new THREE.Vector3();
+    const vehicleState = { pos: new THREE.Vector3(), yaw: 0, speed: 0 };
+    let lastSurvivalTime = 0;
+    let survivalCamTheta = Math.PI;      // π = 車両真後ろ
+
+    const VEHICLE_MAX_SPEED  = 14;
+    const VEHICLE_ACCEL      = 9;
+    const VEHICLE_DECEL      = 7;
+    const VEHICLE_TURN_SPEED = 2.0;
+    const SURVIVAL_CAM_DIST  = 20;
+    const SURVIVAL_CAM_H     = 7;
+
+    // キーボード入力（PC テスト用）
+    const survivalKeys = { w: false, s: false, a: false, d: false };
+    window.addEventListener('keydown', (e) => {
+      if (gameMode !== 'survival') return;
+      if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp')    survivalKeys.w = true;
+      if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown')  survivalKeys.s = true;
+      if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft')  survivalKeys.a = true;
+      if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') survivalKeys.d = true;
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp')    survivalKeys.w = false;
+      if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown')  survivalKeys.s = false;
+      if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft')  survivalKeys.a = false;
+      if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') survivalKeys.d = false;
+    });
+
     const palette = [0xee2222, 0x2277ee, 0xffcc00, 0x22aa44, 0xffffff, 0x222222, 0x9933ee];
 
     // --- Three.js セットアップ ---
@@ -780,6 +897,17 @@
     const gridHelper = new THREE.GridHelper(GRID_SIZE, GRID_SIZE, 0x555566, 0x333344);
     gridHelper.position.y = 0;
     scene.add(gridHelper);
+
+    // サバイバル用の大型フィールド（600×600、建築モードでは非表示）
+    const survivalField = new THREE.Mesh(
+      new THREE.PlaneGeometry(600, 600),
+      new THREE.MeshStandardMaterial({ color: 0x111a0c, roughness: 0.96, metalness: 0.0 })
+    );
+    survivalField.rotation.x = -Math.PI / 2;
+    survivalField.position.y = -0.005;
+    survivalField.receiveShadow = true;
+    survivalField.visible = false;
+    scene.add(survivalField);
 
     // プレビュー変数
     let previewMesh = createPreviewMesh();
@@ -1611,12 +1739,11 @@
       joyVec.y = dy / maxDist;
     }
 
-    // --- FPSスワイプ視点（画面スワイプで yaw/pitch 操作）---
+    // --- FPS / サバイバルスワイプ視点（画面スワイプで yaw/pitch / カメラ回転）---
     window.addEventListener('pointerdown', (e) => {
-      if (gameMode !== 'fps') return;
+      if (gameMode !== 'fps' && gameMode !== 'survival') return;
       if (e.pointerId === joystickTouchId) return;
       if (fpsLookTouchId !== null) return;
-      // ボタン・ジョイスティックゾーン上のタッチは除外
       const t = e.target;
       if (t.tagName === 'BUTTON' || t.id === 'joystick-zone' || t.id === 'joystick-knob') return;
       fpsLookTouchId = e.pointerId;
@@ -1624,14 +1751,19 @@
       fpsLookLastY = e.clientY;
     });
     window.addEventListener('pointermove', (e) => {
-      if (gameMode !== 'fps' || e.pointerId !== fpsLookTouchId) return;
+      if ((gameMode !== 'fps' && gameMode !== 'survival') || e.pointerId !== fpsLookTouchId) return;
       const dx = e.clientX - fpsLookLastX;
       const dy = e.clientY - fpsLookLastY;
       fpsLookLastX = e.clientX;
       fpsLookLastY = e.clientY;
-      player.yaw   -= dx * 0.003;
-      player.pitch += dy * 0.003;
-      player.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
+      if (gameMode === 'fps') {
+        player.yaw   -= dx * 0.003;
+        player.pitch += dy * 0.003;
+        player.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
+      } else {
+        // サバイバル: カメラ水平回転のみ
+        survivalCamTheta -= dx * 0.005;
+      }
     });
     window.addEventListener('pointerup', (e) => {
       if (e.pointerId === fpsLookTouchId) fpsLookTouchId = null;
@@ -1665,7 +1797,7 @@
         activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
       }
 
-      if (gameMode === 'fps') return;
+      if (gameMode === 'fps' || gameMode === 'survival') return;
 
       // 2本指操作：ピンチイン・アウト（拡大縮小） & 2本指パン（カメラ位置移動）
       if (activeTouches.size === 2) {
@@ -2184,6 +2316,7 @@
 
     // ===== FPS: モード切替 =====
     function switchMode() {
+      if (gameMode === 'survival') return;
       if (gameMode === 'build') enterFPSMode(); else enterBuildMode();
     }
 
@@ -2232,6 +2365,176 @@
       document.getElementById('mode-switch-btn').textContent = '🎮 FPSモード';
       document.getElementById('mode-switch-btn').classList.remove('fps-active');
       updateCameraPosition();
+    }
+
+    // ===== サバイバルモード =====
+    function enterSurvivalMode() {
+      if (gameMode === 'survival') return;
+      if (blocksHistory.length === 0) {
+        alert('ビークルを組み立ててからサバイバルへ進んでください');
+        return;
+      }
+
+      gameMode = 'survival';
+
+      // 全ブロックの重心を計算
+      vehicleCentroid.set(0, 0, 0);
+      blocksHistory.forEach(h => vehicleCentroid.add(h.group.position));
+      vehicleCentroid.divideScalar(blocksHistory.length);
+
+      // 元の位置/回転を保存
+      vehicleBlocksData = blocksHistory.map(h => ({
+        group:    h.group,
+        origPos:  h.group.position.clone(),
+        origRotY: h.group.rotation.y,
+      }));
+
+      vehicleState.pos.set(vehicleCentroid.x, 0, vehicleCentroid.z);
+      vehicleState.yaw   = 0;
+      vehicleState.speed = 0;
+      survivalCamTheta   = Math.PI;
+      lastSurvivalTime   = performance.now();
+      survivalKeys.w = survivalKeys.s = survivalKeys.a = survivalKeys.d = false;
+
+      // 建築 UI を非表示
+      document.getElementById('toolbar').style.display         = 'none';
+      document.getElementById('action-btn').style.display      = 'none';
+      document.getElementById('camera-view-btn').style.display = 'none';
+      document.getElementById('mode-switch-btn').style.display = 'none';
+      document.getElementById('fps-edit-btns').style.display   = 'none';
+      previewMesh.visible = false;
+      gridHelper.visible  = false;
+      plane.visible       = false;
+
+      // ワールド切替
+      survivalField.visible = true;
+      scene.background      = new THREE.Color(0x0a1628);
+      dirLight.intensity    = 1.0;
+
+      // サバイバル UI を表示
+      document.getElementById('survival-hud').style.display  = 'flex';
+      document.getElementById('survival-hint').style.display = 'block';
+      document.getElementById('joystick-label').textContent  = '操舵';
+      document.getElementById('block-count').textContent     = '⚔ サバイバル';
+      fpsLookTouchId = null;
+
+      setTimeout(() => {
+        if (gameMode === 'survival')
+          document.getElementById('survival-hint').style.display = 'none';
+      }, 3500);
+
+      updateVehicleTransform();
+      updateSurvivalCamera();
+    }
+
+    function exitSurvivalMode() {
+      if (gameMode !== 'survival') return;
+
+      // ブロックを元の位置・回転に戻す
+      vehicleBlocksData.forEach(({ group, origPos, origRotY }) => {
+        group.position.copy(origPos);
+        group.rotation.y = origRotY;
+      });
+      vehicleBlocksData = [];
+      gameMode = 'build';
+
+      // ワールド復元
+      survivalField.visible = false;
+      gridHelper.visible    = true;
+      plane.visible         = true;
+      scene.background      = new THREE.Color(0x1a1a24);
+      dirLight.intensity    = 0.8;
+
+      // 建築 UI を復元
+      document.getElementById('toolbar').style.display         = 'flex';
+      document.getElementById('action-btn').style.display      = 'flex';
+      document.getElementById('camera-view-btn').style.display = '';
+      document.getElementById('mode-switch-btn').style.display = '';
+      document.getElementById('fps-edit-btns').style.display   = 'flex';
+      document.getElementById('survival-hud').style.display    = 'none';
+      document.getElementById('survival-hint').style.display   = 'none';
+      document.getElementById('joystick-label').textContent    = '移動';
+      updateBlockCount();
+      fpsLookTouchId = null;
+
+      // カメラをビークル中心に戻す
+      cameraTarget.set(vehicleCentroid.x, 0, vehicleCentroid.z);
+      updateCameraPosition();
+      updatePreviewMesh();
+    }
+
+    // ブロックに車両変換を適用（毎フレーム）
+    function updateVehicleTransform() {
+      const cosY = Math.cos(vehicleState.yaw);
+      const sinY = Math.sin(vehicleState.yaw);
+      const vx   = vehicleState.pos.x;
+      const vz   = vehicleState.pos.z;
+      vehicleBlocksData.forEach(({ group, origPos, origRotY }) => {
+        const lx = origPos.x - vehicleCentroid.x;
+        const lz = origPos.z - vehicleCentroid.z;
+        group.position.x = vx + lx * cosY + lz * sinY;
+        group.position.y = origPos.y;
+        group.position.z = vz - lx * sinY + lz * cosY;
+        group.rotation.y = origRotY + vehicleState.yaw;
+      });
+    }
+
+    // 追従カメラ（車両の yaw + survivalCamTheta の方向から見下ろす）
+    function updateSurvivalCamera() {
+      const vp  = vehicleState.pos;
+      const ang = vehicleState.yaw + survivalCamTheta;
+      camera.position.set(
+        vp.x + Math.sin(ang) * SURVIVAL_CAM_DIST,
+        vp.y + SURVIVAL_CAM_H,
+        vp.z + Math.cos(ang) * SURVIVAL_CAM_DIST
+      );
+      camera.lookAt(vp.x, vp.y + 1.5, vp.z);
+    }
+
+    // サバイバル物理ループ
+    function updateSurvival(now) {
+      const dt = Math.min((now - lastSurvivalTime) * 0.001, 0.05);
+      lastSurvivalTime = now;
+      if (dt <= 0) return;
+
+      // 入力：ジョイスティック＋キーボード
+      const gasInput   = -joyVec.y + (survivalKeys.w ? 1 : 0) - (survivalKeys.s ? 1 : 0);
+      const steerInput =  joyVec.x + (survivalKeys.d ? 1 : 0) - (survivalKeys.a ? 1 : 0);
+
+      // 速度
+      if (Math.abs(gasInput) > 0.05) {
+        vehicleState.speed += gasInput * VEHICLE_ACCEL * dt;
+      } else {
+        const dec = VEHICLE_DECEL * dt;
+        if (Math.abs(vehicleState.speed) < dec) vehicleState.speed = 0;
+        else vehicleState.speed -= Math.sign(vehicleState.speed) * dec;
+      }
+      const rev = VEHICLE_MAX_SPEED * 0.45;
+      vehicleState.speed = Math.max(-rev, Math.min(VEHICLE_MAX_SPEED, vehicleState.speed));
+
+      // 旋回（速度があるときだけ）
+      if (Math.abs(vehicleState.speed) > 0.2) {
+        vehicleState.yaw -= steerInput * VEHICLE_TURN_SPEED * dt * Math.sign(vehicleState.speed);
+      }
+
+      // 位置更新
+      vehicleState.pos.x += Math.sin(vehicleState.yaw) * vehicleState.speed * dt;
+      vehicleState.pos.z += Math.cos(vehicleState.yaw) * vehicleState.speed * dt;
+
+      // フィールド境界
+      const B = 295;
+      vehicleState.pos.x = Math.max(-B, Math.min(B, vehicleState.pos.x));
+      vehicleState.pos.z = Math.max(-B, Math.min(B, vehicleState.pos.z));
+
+      // HUD 更新
+      const kmh = Math.round(Math.abs(vehicleState.speed) * 3.6);
+      document.getElementById('survival-speed').textContent = kmh;
+      const gearEl = document.getElementById('survival-gear');
+      gearEl.textContent  = vehicleState.speed >= 0 ? 'D' : 'R';
+      gearEl.style.color  = vehicleState.speed >= 0 ? '#22c55e' : '#ef4444';
+
+      updateVehicleTransform();
+      updateSurvivalCamera();
     }
 
     // ===== FPS: ジャンプ / 飛行 =====
@@ -2544,8 +2847,10 @@
           updateCameraPosition();
         }
         updateRaycast();
-      } else {
+      } else if (gameMode === 'fps') {
         updateFPS(now);
+      } else if (gameMode === 'survival') {
+        updateSurvival(now);
       }
 
       renderer.render(scene, camera);
