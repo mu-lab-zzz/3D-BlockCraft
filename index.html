@@ -2605,9 +2605,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       scene.background      = new THREE.Color(0x0a1628);
       dirLight.intensity    = 1.0;
 
+      initPhysicsWorld();
       if (!terrainBuilt) { buildTerrainObjects(); terrainBuilt = true; }
       terrainObjects.forEach(o => { o.visible = true; });
-      initPhysicsWorld();
       buildVehiclePhysics();
 
       // サバイバル UI を表示
@@ -2738,13 +2738,18 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         for (let i = 0; i < N; i++) {
           hfData.push([]);
           for (let j = 0; j < N; j++) {
-            hfData[i].push(getTerrainHeight(-300 + i * ELEM, -300 + j * ELEM));
+            // cannon-es Heightfield: local XY plane, Z = height
+            // Rx(-90°) body rotation maps localY→world-Z, localZ→worldY
+            // So j-index goes in -Z direction: world_z = 300 - j*ELEM
+            hfData[i].push(getTerrainHeight(-300 + i * ELEM, 300 - j * ELEM));
           }
         }
         const hfShape = new CANNON.Heightfield(hfData, { elementSize: ELEM });
         const hfBody  = new CANNON.Body({ mass: 0 });
         hfBody.addShape(hfShape);
-        hfBody.position.set(-300, 0, -300);
+        // Rotate body so Heightfield lies in XZ plane with Y up
+        hfBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+        hfBody.position.set(-300, 0, 300);
         physicsWorld.addBody(hfBody);
       } catch (e) {
         console.warn('Cannon-es 利用不可 — キネマティックモードで動作します:', e);
@@ -2855,14 +2860,22 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           new THREE.DodecahedronGeometry(s, 0),
           Math.random() > 0.4 ? matRock1 : matRock2
         );
-        rock.position.set(x, y + s * 0.55, z);
+        const cy = y + s * 0.55;
+        rock.position.set(x, cy, z);
         rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-        rock.scale.set(1 + Math.random() * 0.6, 0.5 + Math.random() * 0.7, 1 + Math.random() * 0.6);
+        const sx = 1 + Math.random() * 0.6, sy = 0.5 + Math.random() * 0.7, sz = 1 + Math.random() * 0.6;
+        rock.scale.set(sx, sy, sz);
         rock.castShadow = true;
         rock.receiveShadow = true;
         rock.visible = false;
         scene.add(rock);
         terrainObjects.push(rock);
+        if (physicsWorld) {
+          const rb = new CANNON.Body({ mass: 0 });
+          rb.addShape(new CANNON.Box(new CANNON.Vec3(s * sx * 0.7, s * sy * 0.5, s * sz * 0.7)));
+          rb.position.set(x, cy, z);
+          physicsWorld.addBody(rb);
+        }
       }
 
       // 木
@@ -2900,6 +2913,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         g.visible = false;
         scene.add(g);
         terrainObjects.push(g);
+        if (physicsWorld) {
+          const tb = new CANNON.Body({ mass: 0 });
+          tb.addShape(new CANNON.Cylinder(0.22, 0.22, trunkH + crH * 0.7, 5));
+          tb.position.set(x, y + (trunkH + crH * 0.35) / 2, z);
+          physicsWorld.addBody(tb);
+        }
       }
     }
 
