@@ -739,7 +739,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         </button>
       </div>
     </div>
-    <div id="opening-footer">Tap to start<br><span style="font-size:10px;opacity:.55">build 2026-08-06b · workshop</span></div>
+    <div id="opening-footer">Tap to start<br><span style="font-size:10px;opacity:.55">build 2026-08-06c · workshop</span></div>
   </div>
 
   <!-- 左側 バーチャルパッド (視点操作) -->
@@ -1234,7 +1234,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function canPlaceBlock(cells) {
       for (let key of cells) {
         const [x, y, z] = key.split(',').map(Number);
-        if (y < 0 || Math.abs(x) >= GRID_SIZE / 2 || Math.abs(z) >= GRID_SIZE / 2) return false;
+        // workshopモードは全方向建築のためy<0を許可、クリエイティブは床面以下禁止
+        if ((!survivalWorkshop && y < 0) || Math.abs(x) >= GRID_SIZE / 2 || Math.abs(z) >= GRID_SIZE / 2) return false;
         if (occupiedGrid.has(key)) return false;
       }
       return true;
@@ -2123,7 +2124,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (mouseVector.x === -999) return;
 
       raycaster.setFromCamera(mouseVector, camera);
-      const intersects = raycaster.intersectObjects([plane, ...blockMeshes], true);
+      // workshopモードでは床(plane)を除外し、ブロック面のみにスナップ
+      const intersects = raycaster.intersectObjects(survivalWorkshop ? [...blockMeshes] : [plane, ...blockMeshes], true);
 
       if (intersects.length > 0) {
         const hit = intersects[0];
@@ -2160,7 +2162,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
             const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
             const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
             originX = Math.floor(p.x) - snapOffsetX;
-            originY = Math.max(0, Math.round(hit.point.y * 2)); // 半グリッド単位
+            // workshopモードはy<0も許可（全方向建築）
+            originY = survivalWorkshop ? Math.round(hit.point.y * 2) : Math.max(0, Math.round(hit.point.y * 2));
             originZ = Math.floor(p.z) - snapOffsetZ;
           }
 
@@ -2677,11 +2680,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       vehicleBlocksData = [];
       gameMode = 'build';
 
-      // ワールド復元
+      // ワールド復元（workshopモードでは床・グリッドは非表示のまま）
       survivalField.visible = false;
       terrainObjects.forEach(o => { o.visible = false; });
-      gridHelper.visible    = true;
-      plane.visible         = true;
+      gridHelper.visible    = !survivalWorkshop;
+      plane.visible         = !survivalWorkshop;
       scene.background      = new THREE.Color(0x1a1a24);
       dirLight.intensity    = 0.8;
 
@@ -2698,7 +2701,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       fpsLookTouchId = null;
 
       // カメラをビークル中心に戻す
-      cameraTarget.set(vehicleCentroid.x, 0, vehicleCentroid.z);
+      cameraTarget.set(vehicleCentroid.x, survivalWorkshop ? vehicleCentroid.y : 0, vehicleCentroid.z);
       updateCameraPosition();
       updatePreviewMesh();
     }
@@ -3207,7 +3210,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function updateFPSRaycast(lookDir) {
       const ray = new THREE.Raycaster(camera.position, lookDir.clone().normalize(), 0.1, 18);
-      const hits = ray.intersectObjects([plane, ...blockMeshes], true);
+      const hits = ray.intersectObjects(survivalWorkshop ? [...blockMeshes] : [plane, ...blockMeshes], true);
 
       if (hits.length > 0) {
         const hit = hits[0];
@@ -3403,23 +3406,54 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // ループ処理
     // ===== オープニング =====
     function startCreativeMode() {
-      survivalWorkshop = false;  // クリエイティブは従来通り床面組立
-      clearAllBlocksSilent();    // 前回セーブ(サバイバル等)の車両を消去してまっさら状態で開始
-      autoSave();                // 空の状態を保存し次回も引き継がないようにする
+      survivalWorkshop = false;
+      plane.visible      = true;
+      gridHelper.visible = true;
+      clearAllBlocksSilent();
+      autoSave();
       const el = document.getElementById('opening-screen');
       el.classList.add('fadeout');
       setTimeout(() => { el.style.display = 'none'; }, 450);
     }
 
     function startSurvivalMode() {
-      survivalWorkshop = true;   // ワークショップ = 空中組立（TerraTech 式）
+      survivalWorkshop = true;
       const el = document.getElementById('opening-screen');
       el.classList.add('fadeout');
       setTimeout(() => {
         el.style.display = 'none';
-        spawnStarterVehicle();
-        enterSurvivalMode();
+        // 床・グリッドを非表示にして全方向組立ワークショップへ
+        plane.visible      = false;
+        gridHelper.visible = false;
+        spawnWorkshopCockpit();
+        // enterSurvivalMode() は呼ばない: まずビルドモードで車両を組む
       }, 450);
+    }
+
+    // ワークショップ開始: コクピット1個を空中に配置
+    function spawnWorkshopCockpit() {
+      clearAllBlocksSilent();
+
+      // cockpit2x2 を(x=-1, hy=4, z=-1)に置くと世界座標(0,2,0)中心に浮く
+      const WX = -1, WHY = 4, WZ = -1;
+      const group = createBlockMesh('cockpit2x2', 0x1e3a5f, 0, null);
+      group.position.set(WX, WHY * 0.5, WZ);
+      scene.add(group);
+      const cells = getOccupiedCells(WX, WHY, WZ, 'cockpit2x2', 0, null);
+      cells.forEach(k => occupiedGrid.set(k, group));
+      group.traverse(c => {
+        if (c.isMesh) { c.userData.rootGroup = group; blockMeshes.push(c); }
+      });
+      blocksHistory.push({ group, cells, type: 'cockpit2x2', color: 0x1e3a5f, rot: 0, tilt: null });
+      updateBlockCount();
+      autoSave();
+
+      // カメラをコクピット中心に向ける
+      cameraTarget.set(0, 2, 0);
+      cameraRadius = 15;
+      cameraPhi    = Math.PI / 3;
+      cameraTheta  = Math.PI / 4;
+      updateCameraPosition();
     }
 
     // スターター自機を生成する（ブロックを直接配置）
