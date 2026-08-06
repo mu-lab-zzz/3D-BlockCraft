@@ -535,6 +535,26 @@
       white-space: nowrap;
     }
     #survival-exit-btn:active { transform: scale(0.95); }
+    #survival-enter-btn {
+      display: none;
+      position: absolute;
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 10px);
+      right: 15px;
+      background: rgba(239,68,68,0.85);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      border: 1px solid rgba(252,165,165,0.4);
+      padding: 10px 22px;
+      border-radius: 22px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform 0.1s;
+      white-space: nowrap;
+      z-index: 20;
+    }
+    #survival-enter-btn:active { transform: scale(0.95); }
     .survival-badge {
       background: rgba(0,0,0,0.65);
       backdrop-filter: blur(8px);
@@ -928,7 +948,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06j · workshop</span>
+      <span class="footer-version">build 2026-08-06k · workshop</span>
     </div>
   </div>
 
@@ -1065,6 +1085,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
   <!-- サバイバルモード カメラ操作ヒント -->
   <div id="survival-hint">⚔ サバイバルモード ｜ 右スワイプ: カメラ回転</div>
+
+  <!-- ワークショップ中のサバイバル移行ボタン（survival-exit-btn と同位置） -->
+  <button id="survival-enter-btn" onclick="enterSurvivalMode()">⚔ サバイバルへ</button>
 
   <!-- その他メニュー -->
   <div id="more-menu" class="sub-menu">
@@ -2869,6 +2892,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       else                           { engEl.textContent = 'OFF'; engEl.style.color = '#f87171'; }
 
       // サバイバル UI を表示
+      document.getElementById('survival-enter-btn').style.display = 'none';
       document.getElementById('survival-hud').style.display  = 'flex';
       document.getElementById('survival-hint').style.display = 'block';
       document.getElementById('joystick-label').textContent  = '操舵';
@@ -2913,6 +2937,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       document.getElementById('fps-edit-btns').style.display   = 'flex';
       document.getElementById('survival-hud').style.display    = 'none';
       document.getElementById('survival-hint').style.display   = 'none';
+      document.getElementById('survival-enter-btn').style.display = survivalWorkshop ? '' : 'none';
       document.getElementById('joystick-label').textContent    = '移動';
       updateBlockCount();
       fpsLookTouchId = null;
@@ -3644,6 +3669,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function startCreativeMode() {
       survivalWorkshop = false;
       document.getElementById('btn-surv-save-menu').style.display = 'none';
+      document.getElementById('survival-enter-btn').style.display = 'none';
       plane.visible      = true;
       gridHelper.visible = true;
       clearAllBlocksSilent();
@@ -3670,6 +3696,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function _launchSurvivalWorkshop(loadFn) {
       survivalWorkshop = true;
       document.getElementById('btn-surv-save-menu').style.display = '';
+      document.getElementById('survival-enter-btn').style.display = '';
       const el = document.getElementById('opening-screen');
       el.classList.add('fadeout');
       setTimeout(() => {
