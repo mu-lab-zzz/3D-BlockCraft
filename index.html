@@ -999,7 +999,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let terrainBuilt   = false;
     let chassisBody    = null;
     let rayVehicle     = null;
-    let wheelInfosMeta = []; // { isRear: bool } per wheel
+    let wheelInfosMeta = []; // { isRear, group, origRotY, ax, az } per physics wheel
+    let currentSteer   = 0;  // ステアリング補間状態 (rad)
+    const STEER_SPEED  = 5;  // ステアリング補間速度 (rad/s)
 
     // キーボード入力（PC テスト用）
     const survivalKeys = { w: false, s: false, a: false, d: false };
@@ -2673,12 +2675,40 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const bq = chassisBody.quaternion;
         if (isNaN(bp.x) || isNaN(bp.y) || isNaN(bp.z)) return;
         const threeQ = new THREE.Quaternion(bq.x, bq.y, bq.z, bq.w);
+
+        // 非タイヤ含む全ブロックをシャーシ剛体に追従させる（第1パス）
         vehicleBlocksData.forEach(({ group, localPos, origRotY }) => {
           const rotated = localPos.clone().applyQuaternion(threeQ);
           group.position.set(bp.x + rotated.x, bp.y + rotated.y, bp.z + rotated.z);
           const origQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, origRotY, 0));
           group.setRotationFromQuaternion(new THREE.Quaternion().multiplyQuaternions(threeQ, origQ));
         });
+
+        // タイヤブロックを物理ホイールのワールドトランスフォームで上書き（第2パス）
+        // → サスペンション伸縮・接地に視覚が正確に追従する
+        if (rayVehicle) {
+          const numW = rayVehicle.wheelInfos.length;
+          for (let i = 0; i < numW; i++) {
+            rayVehicle.updateWheelTransform(i);
+            const wt = rayVehicle.wheelInfos[i].worldTransform;
+            const { group, origRotY, ax, az } = wheelInfosMeta[i];
+
+            // グループ回転 = シャーシ姿勢 × ホイール初期Y回転
+            const origQ  = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, origRotY, 0));
+            const groupQ = new THREE.Quaternion().multiplyQuaternions(threeQ, origQ);
+            group.setRotationFromQuaternion(groupQ);
+
+            // タイヤトーラスはグループ内ローカル (ax, 0.5, az) にある
+            // グループ原点 = 物理ホイール中心 − ローカルオフセットをワールド変換したもの
+            const tireOffset = new THREE.Vector3(ax, 0.5, az).applyQuaternion(groupQ);
+            group.position.set(
+              wt.position.x - tireOffset.x,
+              wt.position.y - tireOffset.y,
+              wt.position.z - tireOffset.z
+            );
+          }
+        }
+
         const euler = new THREE.Euler().setFromQuaternion(threeQ, 'YXZ');
         vehicleState.yaw = euler.y;
         vehicleState.pos.set(bp.x, bp.y, bp.z);
@@ -2757,15 +2787,27 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
     }
 
+    // ブロック種別ごとの質量 (kg相当)
+    const BLOCK_MASS_TABLE = { 'wheel': 15, '2x4': 40, 'cockpit2x2': 30 };
+    const getBlockMass = type => BLOCK_MASS_TABLE[type] || 20;
+
     // 車両の Cannon-es 剛体 + RaycastVehicle を構築
     function buildVehiclePhysics() {
       if (!physicsWorld) return;
       teardownVehiclePhysics();
+      currentSteer = 0;
 
       const groundY = getTerrainHeight(vehicleCentroid.x, vehicleCentroid.z);
       const initY   = groundY + WHEEL_GROUND_OFFSET + vehicleCentroid.y;
 
-      chassisBody = new CANNON.Body({ mass: 200, linearDamping: 0.05, angularDamping: 0.4 });
+      // ブロック合計質量
+      const totalMass = Math.max(100, blocksHistory.reduce((s, h) => s + getBlockMass(h.type), 0));
+
+      chassisBody = new CANNON.Body({
+        mass: totalMass,
+        linearDamping:  0.05,
+        angularDamping: 0.3,  // 低めにして物理に任せる
+      });
       chassisBody.position.set(vehicleCentroid.x, initY, vehicleCentroid.z);
 
       // 非タイヤブロックの AABB から chassis collision shape を生成
@@ -2777,9 +2819,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         nonWheels.forEach(({ group, type, rot }) => {
           const dim = getBlockDimensions(type, rot);
           const gx = group.position.x, gy = group.position.y, gz = group.position.z;
-          minX = Math.min(minX, gx - 0.5);       maxX = Math.max(maxX, gx + dim.w - 0.5);
-          minY = Math.min(minY, gy);               maxY = Math.max(maxY, gy + dim.h);
-          minZ = Math.min(minZ, gz - 0.5);        maxZ = Math.max(maxZ, gz + dim.d - 0.5);
+          minX = Math.min(minX, gx - 0.5);  maxX = Math.max(maxX, gx + dim.w - 0.5);
+          minY = Math.min(minY, gy);         maxY = Math.max(maxY, gy + dim.h);
+          minZ = Math.min(minZ, gz - 0.5);  maxZ = Math.max(maxZ, gz + dim.d - 0.5);
         });
         const hW = (maxX - minX) / 2, hH = (maxY - minY) / 2, hD = (maxZ - minZ) / 2;
         const cx = (minX + maxX) / 2 - vehicleCentroid.x;
@@ -2789,7 +2831,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
       physicsWorld.addBody(chassisBody);
 
-      // RaycastVehicle
+      // RaycastVehicle（前進方向=+Z, 右=+X, 上=+Y）
       rayVehicle = new CANNON.RaycastVehicle({
         chassisBody,
         indexForwardAxis: 2,
@@ -2803,6 +2845,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const lx = group.position.x - vehicleCentroid.x;
         const lz = group.position.z - vehicleCentroid.z;
 
+        // アクスル方向をrotから決定
         const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
         let ax = 0, az = 0;
         if      (rotSteps === 0) ax =  1;
@@ -2810,26 +2853,34 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         else if (rotSteps === 1) az =  1;
         else                     az = -1;
 
-        // 接続点: タイヤ中心より suspensionRestLength だけ上
+        // サスペンション接続点: タイヤ中心より restLength だけ上
+        // タイヤ中心 world_y = chassis_y + connY - restLen = groundY + TYRE_RADIUS
         const connX = lx + ax;
         const connY = (0.5 - vehicleCentroid.y) + SUSP_REST_LEN;
         const connZ = lz;
 
         rayVehicle.addWheel({
-          radius:                       TYRE_RADIUS,
-          directionLocal:               new CANNON.Vec3(0, -1, 0),
-          axleLocal:                    new CANNON.Vec3(ax, 0, az),
-          chassisConnectionPointLocal:  new CANNON.Vec3(connX, connY, connZ),
-          suspensionStiffness:          35,
-          suspensionRestLength:         SUSP_REST_LEN,
-          frictionSlip:                 3.5,
-          dampingRelaxation:            2.3,
-          dampingCompression:           4.5,
-          maxSuspensionForce:           200000,
-          rollInfluence:                0.02,
-          maxSuspensionTravel:          0.5,
+          radius:                      TYRE_RADIUS,
+          directionLocal:              new CANNON.Vec3(0, -1, 0),
+          axleLocal:                   new CANNON.Vec3(ax, 0, az),
+          chassisConnectionPointLocal: new CANNON.Vec3(connX, connY, connZ),
+          suspensionStiffness:         40,    // 適度な硬さ
+          suspensionRestLength:        SUSP_REST_LEN,
+          frictionSlip:                5.0,   // グリップ強め（横滑り抑制）
+          dampingRelaxation:           2.5,   // 伸び側ダンパー
+          dampingCompression:          3.0,   // 縮み側ダンパー（柔らか目）
+          maxSuspensionForce:          200000,
+          rollInfluence:               0.05,  // 微量のロール許可
+          maxSuspensionTravel:         0.6,   // 段差乗り越え余裕
         });
-        wheelInfosMeta.push({ isRear: lz <= 0 });
+
+        // 視覚同期用メタデータ（group, 初期Y回転, アクスル方向）を保存
+        wheelInfosMeta.push({
+          isRear:   lz <= 0,
+          group,
+          origRotY: group.rotation.y,
+          ax, az,
+        });
       });
 
       rayVehicle.addToWorld(physicsWorld);
@@ -2934,19 +2985,30 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (rayVehicle && chassisBody) {
         // ===== Cannon-es 物理 =====
         const engineForce = gasInput * VEHICLE_ENGINE_FORCE;
-        const steerVal    = -steerInput * VEHICLE_STEER_MAX;
+
+        // ステアリング補間（瞬時切り替えではなく滑らかに追従）
+        const targetSteer = -steerInput * VEHICLE_STEER_MAX;
+        currentSteer += (targetSteer - currentSteer) * Math.min(1, STEER_SPEED * dt);
+
+        const isBraking = Math.abs(gasInput) < 0.05;
         const numW = rayVehicle.wheelInfos.length;
         for (let i = 0; i < numW; i++) {
           const meta = wheelInfosMeta[i];
           if (meta.isRear) {
+            // 後輪駆動: 接地していない場合も含め engine force を渡す（RaycastVehicle が接地判定）
             rayVehicle.applyEngineForce(engineForce, i);
             rayVehicle.setSteeringValue(0, i);
           } else {
             rayVehicle.applyEngineForce(0, i);
-            rayVehicle.setSteeringValue(steerVal, i);
+            rayVehicle.setSteeringValue(currentSteer, i);
           }
-          rayVehicle.setBrake(Math.abs(gasInput) < 0.05 ? VEHICLE_BRAKE_FORCE : 0, i);
+          rayVehicle.setBrake(isBraking ? VEHICLE_BRAKE_FORCE : 0, i);
         }
+
+        // 高速時の安定化: 角速度を緩やかに減衰（横転・スピン抑制）
+        const av = chassisBody.angularVelocity;
+        chassisBody.angularVelocity.set(av.x * 0.97, av.y * 0.98, av.z * 0.97);
+
         try { physicsWorld.step(1 / 60, dt, 3); } catch(e) { console.error('physics step error:', e); }
 
         // HUD
