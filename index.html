@@ -710,6 +710,7 @@
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"></script>
 </head>
 <body>
 
@@ -985,10 +986,18 @@
     const VEHICLE_TURN_SPEED = 2.0;
     const SURVIVAL_CAM_DIST  = 20;
     const SURVIVAL_CAM_H     = 7;
-    const WHEEL_GROUND_OFFSET = 0.83; // タイヤ半径 - ハブY中心 (1.33 - 0.5)
+    const WHEEL_GROUND_OFFSET  = 0.83;  // タイヤ半径 - ハブY中心 (1.33 - 0.5)
+    const TYRE_RADIUS          = 1.33;  // R + tubeR of the torus
+    const SUSP_REST_LEN        = 0.35;  // サスペンション自然長
+    const VEHICLE_ENGINE_FORCE = 2200;
+    const VEHICLE_STEER_MAX    = 0.52;
+    const VEHICLE_BRAKE_FORCE  = 40;
 
     let terrainObjects = [];
     let terrainBuilt   = false;
+    let chassisBody    = null;
+    let rayVehicle     = null;
+    let wheelInfosMeta = []; // { isRear: bool } per wheel
 
     // キーボード入力（PC テスト用）
     const survivalKeys = { w: false, s: false, a: false, d: false };
@@ -1087,6 +1096,29 @@
     survivalField.receiveShadow = true;
     survivalField.visible = false;
     scene.add(survivalField);
+
+    // ===== Cannon-es 物理ワールド =====
+    const physicsWorld = new CANNON.World({ gravity: new CANNON.Vec3(0, -22, 0) });
+    physicsWorld.broadphase = new CANNON.SAPBroadphase(physicsWorld);
+    physicsWorld.solver.iterations = 10;
+
+    // 地形 HeightField（getTerrainHeight は function 宣言なのでホイスト済み）
+    {
+      const N    = TERRAIN_SEGS + 1; // 121
+      const ELEM = 600 / TERRAIN_SEGS; // 5 units
+      const hfData = [];
+      for (let i = 0; i < N; i++) {
+        hfData.push([]);
+        for (let j = 0; j < N; j++) {
+          hfData[i].push(getTerrainHeight(-300 + i * ELEM, -300 + j * ELEM));
+        }
+      }
+      const hfShape = new CANNON.Heightfield(hfData, { elementSize: ELEM });
+      const hfBody  = new CANNON.Body({ mass: 0 });
+      hfBody.addShape(hfShape);
+      hfBody.position.set(-300, 0, -300);
+      physicsWorld.addBody(hfBody);
+    }
 
     // プレビュー変数
     let previewMesh = createPreviewMesh();
@@ -2561,11 +2593,12 @@
       blocksHistory.forEach(h => vehicleCentroid.add(h.group.position));
       vehicleCentroid.divideScalar(blocksHistory.length);
 
-      // 元の位置/回転を保存
+      // 元の位置/回転を保存（localPos = chassis-local オフセット）
       vehicleBlocksData = blocksHistory.map(h => ({
         group:    h.group,
         origPos:  h.group.position.clone(),
         origRotY: h.group.rotation.y,
+        localPos: h.group.position.clone().sub(vehicleCentroid),
       }));
 
       vehicleState.pos.set(vehicleCentroid.x, 0, vehicleCentroid.z);
@@ -2592,6 +2625,7 @@
 
       if (!terrainBuilt) { buildTerrainObjects(); terrainBuilt = true; }
       terrainObjects.forEach(o => { o.visible = true; });
+      buildVehiclePhysics();
 
       // サバイバル UI を表示
       document.getElementById('survival-hud').style.display  = 'flex';
@@ -2612,10 +2646,12 @@
     function exitSurvivalMode() {
       if (gameMode !== 'survival') return;
 
+      teardownVehiclePhysics();
+
       // ブロックを元の位置・回転に戻す
       vehicleBlocksData.forEach(({ group, origPos, origRotY }) => {
         group.position.copy(origPos);
-        group.rotation.y = origRotY;
+        group.rotation.set(0, origRotY, 0);
       });
       vehicleBlocksData = [];
       gameMode = 'build';
@@ -2648,35 +2684,48 @@
 
     // ブロックに車両変換を適用（毎フレーム）
     function updateVehicleTransform() {
-      const cosY    = Math.cos(vehicleState.yaw);
-      const sinY    = Math.sin(vehicleState.yaw);
-      const vx      = vehicleState.pos.x;
-      const vz      = vehicleState.pos.z;
-      const groundY = getTerrainHeight(vx, vz);
-      vehicleBlocksData.forEach(({ group, origPos, origRotY }) => {
-        const lx = origPos.x - vehicleCentroid.x;
-        const lz = origPos.z - vehicleCentroid.z;
-        group.position.x = vx + lx * cosY + lz * sinY;
-        group.position.y = origPos.y + groundY + WHEEL_GROUND_OFFSET;
-        group.position.z = vz - lx * sinY + lz * cosY;
-        group.rotation.y = origRotY + vehicleState.yaw;
-      });
+      if (chassisBody) {
+        // --- 物理同期 ---
+        const bp = chassisBody.position;
+        const bq = chassisBody.quaternion;
+        const threeQ = new THREE.Quaternion(bq.x, bq.y, bq.z, bq.w);
+        vehicleBlocksData.forEach(({ group, localPos, origRotY }) => {
+          const rotated = localPos.clone().applyQuaternion(threeQ);
+          group.position.set(bp.x + rotated.x, bp.y + rotated.y, bp.z + rotated.z);
+          const origQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, origRotY, 0));
+          group.setRotationFromQuaternion(new THREE.Quaternion().multiplyQuaternions(threeQ, origQ));
+        });
+        const euler = new THREE.Euler().setFromQuaternion(threeQ, 'YXZ');
+        vehicleState.yaw = euler.y;
+        vehicleState.pos.set(bp.x, bp.y, bp.z);
+      } else {
+        // --- キネマティック fallback ---
+        const cosY    = Math.cos(vehicleState.yaw);
+        const sinY    = Math.sin(vehicleState.yaw);
+        const vx      = vehicleState.pos.x;
+        const vz      = vehicleState.pos.z;
+        const groundY = getTerrainHeight(vx, vz);
+        vehicleBlocksData.forEach(({ group, localPos, origRotY }) => {
+          group.position.x = vx + localPos.x * cosY + localPos.z * sinY;
+          group.position.y = localPos.y + vehicleCentroid.y + groundY + WHEEL_GROUND_OFFSET;
+          group.position.z = vz - localPos.x * sinY + localPos.z * cosY;
+          group.rotation.set(0, origRotY + vehicleState.yaw, 0);
+        });
+      }
     }
 
     // 追従カメラ（車両の yaw + survivalCamTheta の方向から見下ろす）
     function updateSurvivalCamera() {
-      const vp       = vehicleState.pos;
-      const ang      = vehicleState.yaw + survivalCamTheta;
-      const groundY  = getTerrainHeight(vp.x, vp.z);
-      const baseY    = groundY + WHEEL_GROUND_OFFSET;
-      const camX     = vp.x + Math.sin(ang) * SURVIVAL_CAM_DIST;
-      const camZ     = vp.z + Math.cos(ang) * SURVIVAL_CAM_DIST;
+      const vp   = vehicleState.pos;
+      const ang  = vehicleState.yaw + survivalCamTheta;
+      const camX = vp.x + Math.sin(ang) * SURVIVAL_CAM_DIST;
+      const camZ = vp.z + Math.cos(ang) * SURVIVAL_CAM_DIST;
+      // 車体実 Y（物理時は chassisBody.position.y、キネマティック時は groundY+offset）
+      const baseY = chassisBody
+        ? chassisBody.position.y
+        : getTerrainHeight(vp.x, vp.z) + WHEEL_GROUND_OFFSET + vehicleCentroid.y;
       const camFloor = getTerrainHeight(camX, camZ) + 2.5;
-      camera.position.set(
-        camX,
-        Math.max(baseY + SURVIVAL_CAM_H, camFloor),
-        camZ
-      );
+      camera.position.set(camX, Math.max(baseY + SURVIVAL_CAM_H, camFloor), camZ);
       camera.lookAt(vp.x, baseY + 1.8, vp.z);
     }
 
@@ -2690,6 +2739,89 @@
         Math.cos(x * 0.13 + 2.5)  * Math.cos(z * 0.11 + 1.7)  * 1.8 +
         Math.sin(x * 0.22 + 0.4)  * Math.cos(z * 0.19 + 2.1)  * 0.9;
       return h * blend;
+    }
+
+    // 車両の Cannon-es 剛体 + RaycastVehicle を構築
+    function buildVehiclePhysics() {
+      teardownVehiclePhysics();
+
+      const groundY = getTerrainHeight(vehicleCentroid.x, vehicleCentroid.z);
+      const initY   = groundY + WHEEL_GROUND_OFFSET + vehicleCentroid.y;
+
+      chassisBody = new CANNON.Body({ mass: 200, linearDamping: 0.05, angularDamping: 0.4 });
+      chassisBody.position.set(vehicleCentroid.x, initY + 1.0, vehicleCentroid.z); // 少し上から落下
+
+      // 非タイヤブロックの AABB から chassis collision shape を生成
+      const nonWheels = blocksHistory.filter(h => h.type !== 'wheel' && !isLargeWheelType(h.type));
+      if (nonWheels.length === 0) {
+        chassisBody.addShape(new CANNON.Box(new CANNON.Vec3(1, 0.5, 2)));
+      } else {
+        let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity, minZ=Infinity, maxZ=-Infinity;
+        nonWheels.forEach(({ group, type, rot }) => {
+          const dim = getBlockDimensions(type, rot);
+          const gx = group.position.x, gy = group.position.y, gz = group.position.z;
+          minX = Math.min(minX, gx - 0.5);       maxX = Math.max(maxX, gx + dim.w - 0.5);
+          minY = Math.min(minY, gy);               maxY = Math.max(maxY, gy + dim.h);
+          minZ = Math.min(minZ, gz - 0.5);        maxZ = Math.max(maxZ, gz + dim.d - 0.5);
+        });
+        const hW = (maxX - minX) / 2, hH = (maxY - minY) / 2, hD = (maxZ - minZ) / 2;
+        const cx = (minX + maxX) / 2 - vehicleCentroid.x;
+        const cy = (minY + maxY) / 2 - vehicleCentroid.y;
+        const cz = (minZ + maxZ) / 2 - vehicleCentroid.z;
+        chassisBody.addShape(new CANNON.Box(new CANNON.Vec3(hW, hH, hD)), new CANNON.Vec3(cx, cy, cz));
+      }
+      physicsWorld.addBody(chassisBody);
+
+      // RaycastVehicle
+      rayVehicle = new CANNON.RaycastVehicle({
+        chassisBody,
+        indexForwardAxis: 2,
+        indexRightAxis:   0,
+        indexUpAxis:      1,
+      });
+
+      wheelInfosMeta = [];
+      const wheelBlocks = blocksHistory.filter(h => h.type === 'wheel');
+      wheelBlocks.forEach(({ group, rot }) => {
+        const lx = group.position.x - vehicleCentroid.x;
+        const lz = group.position.z - vehicleCentroid.z;
+
+        const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
+        let ax = 0, az = 0;
+        if      (rotSteps === 0) ax =  1;
+        else if (rotSteps === 2) ax = -1;
+        else if (rotSteps === 1) az =  1;
+        else                     az = -1;
+
+        // 接続点: タイヤ中心より suspensionRestLength だけ上
+        const connX = lx + ax;
+        const connY = (0.5 - vehicleCentroid.y) + SUSP_REST_LEN;
+        const connZ = lz;
+
+        rayVehicle.addWheel({
+          radius:                       TYRE_RADIUS,
+          directionLocal:               new CANNON.Vec3(0, -1, 0),
+          axleLocal:                    new CANNON.Vec3(ax, 0, az),
+          chassisConnectionPointLocal:  new CANNON.Vec3(connX, connY, connZ),
+          suspensionStiffness:          35,
+          suspensionRestLength:         SUSP_REST_LEN,
+          frictionSlip:                 3.5,
+          dampingRelaxation:            2.3,
+          dampingCompression:           4.5,
+          maxSuspensionForce:           200000,
+          rollInfluence:                0.02,
+          maxSuspensionTravel:          0.5,
+        });
+        wheelInfosMeta.push({ isRear: lz <= 0 });
+      });
+
+      rayVehicle.addToWorld(physicsWorld);
+    }
+
+    function teardownVehiclePhysics() {
+      if (rayVehicle) { rayVehicle.removeFromWorld(physicsWorld); rayVehicle = null; }
+      if (chassisBody) { physicsWorld.removeBody(chassisBody); chassisBody = null; }
+      wheelInfosMeta = [];
     }
 
     // 岩・木などの地形オブジェクトを生成（初回サバイバル突入時に一度だけ実行）
@@ -2764,41 +2896,58 @@
       lastSurvivalTime = now;
       if (dt <= 0) return;
 
-      // 入力：ジョイスティック＋キーボード
       const gasInput   = -joyVec.y + (survivalKeys.w ? 1 : 0) - (survivalKeys.s ? 1 : 0);
       const steerInput =  joyVec.x + (survivalKeys.d ? 1 : 0) - (survivalKeys.a ? 1 : 0);
 
-      // 速度
-      if (Math.abs(gasInput) > 0.05) {
-        vehicleState.speed += gasInput * VEHICLE_ACCEL * dt;
+      if (rayVehicle && chassisBody) {
+        // ===== Cannon-es 物理 =====
+        const engineForce = gasInput * VEHICLE_ENGINE_FORCE;
+        const steerVal    = -steerInput * VEHICLE_STEER_MAX;
+        const numW = rayVehicle.wheelInfos.length;
+        for (let i = 0; i < numW; i++) {
+          const meta = wheelInfosMeta[i];
+          if (meta.isRear) {
+            rayVehicle.applyEngineForce(engineForce, i);
+            rayVehicle.setSteeringValue(0, i);
+          } else {
+            rayVehicle.applyEngineForce(0, i);
+            rayVehicle.setSteeringValue(steerVal, i);
+          }
+          rayVehicle.setBrake(Math.abs(gasInput) < 0.05 ? VEHICLE_BRAKE_FORCE : 0, i);
+        }
+        physicsWorld.step(1 / 60, dt, 3);
+
+        // HUD
+        const vel = chassisBody.velocity;
+        const spd = Math.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2);
+        document.getElementById('survival-speed').textContent = Math.round(spd * 3.6);
+        const fwdX = Math.sin(vehicleState.yaw), fwdZ = Math.cos(vehicleState.yaw);
+        const fwdVel = vel.x * fwdX + vel.z * fwdZ;
+        const gearEl = document.getElementById('survival-gear');
+        gearEl.textContent = fwdVel >= -0.5 ? 'D' : 'R';
+        gearEl.style.color = fwdVel >= -0.5 ? '#22c55e' : '#ef4444';
       } else {
-        const dec = VEHICLE_DECEL * dt;
-        if (Math.abs(vehicleState.speed) < dec) vehicleState.speed = 0;
-        else vehicleState.speed -= Math.sign(vehicleState.speed) * dec;
+        // ===== キネマティック fallback =====
+        if (Math.abs(gasInput) > 0.05) {
+          vehicleState.speed += gasInput * VEHICLE_ACCEL * dt;
+        } else {
+          const dec = VEHICLE_DECEL * dt;
+          if (Math.abs(vehicleState.speed) < dec) vehicleState.speed = 0;
+          else vehicleState.speed -= Math.sign(vehicleState.speed) * dec;
+        }
+        vehicleState.speed = Math.max(-VEHICLE_MAX_SPEED * 0.45, Math.min(VEHICLE_MAX_SPEED, vehicleState.speed));
+        if (Math.abs(vehicleState.speed) > 0.2)
+          vehicleState.yaw -= steerInput * VEHICLE_TURN_SPEED * dt * Math.sign(vehicleState.speed);
+        vehicleState.pos.x += Math.sin(vehicleState.yaw) * vehicleState.speed * dt;
+        vehicleState.pos.z += Math.cos(vehicleState.yaw) * vehicleState.speed * dt;
+        const B = 295;
+        vehicleState.pos.x = Math.max(-B, Math.min(B, vehicleState.pos.x));
+        vehicleState.pos.z = Math.max(-B, Math.min(B, vehicleState.pos.z));
+        document.getElementById('survival-speed').textContent = Math.round(Math.abs(vehicleState.speed) * 3.6);
+        const gearEl = document.getElementById('survival-gear');
+        gearEl.textContent = vehicleState.speed >= 0 ? 'D' : 'R';
+        gearEl.style.color = vehicleState.speed >= 0 ? '#22c55e' : '#ef4444';
       }
-      const rev = VEHICLE_MAX_SPEED * 0.45;
-      vehicleState.speed = Math.max(-rev, Math.min(VEHICLE_MAX_SPEED, vehicleState.speed));
-
-      // 旋回（速度があるときだけ）
-      if (Math.abs(vehicleState.speed) > 0.2) {
-        vehicleState.yaw -= steerInput * VEHICLE_TURN_SPEED * dt * Math.sign(vehicleState.speed);
-      }
-
-      // 位置更新
-      vehicleState.pos.x += Math.sin(vehicleState.yaw) * vehicleState.speed * dt;
-      vehicleState.pos.z += Math.cos(vehicleState.yaw) * vehicleState.speed * dt;
-
-      // フィールド境界
-      const B = 295;
-      vehicleState.pos.x = Math.max(-B, Math.min(B, vehicleState.pos.x));
-      vehicleState.pos.z = Math.max(-B, Math.min(B, vehicleState.pos.z));
-
-      // HUD 更新
-      const kmh = Math.round(Math.abs(vehicleState.speed) * 3.6);
-      document.getElementById('survival-speed').textContent = kmh;
-      const gearEl = document.getElementById('survival-gear');
-      gearEl.textContent  = vehicleState.speed >= 0 ? 'D' : 'R';
-      gearEl.style.color  = vehicleState.speed >= 0 ? '#22c55e' : '#ef4444';
 
       updateVehicleTransform();
       updateSurvivalCamera();
