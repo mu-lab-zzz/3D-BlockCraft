@@ -699,13 +699,27 @@
       line-height: 1.5;
     }
     #opening-footer {
-      position: relative;
-      z-index: 1;
-      font-size: 10px;
-      color: rgba(255,255,255,0.22);
-      letter-spacing: 0.08em;
+      position: absolute;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2;
+      text-align: center;
+      white-space: nowrap;
+    }
+    #opening-footer .footer-tap {
+      font-size: 13px;
+      color: rgba(255,255,255,0.7);
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      margin-top: auto;
+    }
+    #opening-footer .footer-version {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+      color: #ffffff;
+      letter-spacing: 0.1em;
+      font-weight: 600;
     }
   </style>
 
@@ -739,7 +753,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         </button>
       </div>
     </div>
-    <div id="opening-footer">Tap to start<br><span style="font-size:10px;opacity:.55">build 2026-08-06c · workshop</span></div>
+    <div id="opening-footer">
+      <span class="footer-tap">Tap to start</span>
+      <span class="footer-version">build 2026-08-06c · workshop</span>
+    </div>
   </div>
 
   <!-- 左側 バーチャルパッド (視点操作) -->
