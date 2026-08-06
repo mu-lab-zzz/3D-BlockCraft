@@ -3404,10 +3404,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // ===== オープニング =====
     function startCreativeMode() {
       survivalWorkshop = false;  // クリエイティブは従来通り床面組立
+      clearAllBlocksSilent();    // 前回セーブ(サバイバル等)の車両を消去してまっさら状態で開始
+      autoSave();                // 空の状態を保存し次回も引き継がないようにする
       const el = document.getElementById('opening-screen');
       el.classList.add('fadeout');
       setTimeout(() => { el.style.display = 'none'; }, 450);
-      // build モードは既定状態なのでそのまま
     }
 
     function startSurvivalMode() {
