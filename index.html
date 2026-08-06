@@ -576,6 +576,137 @@
       z-index: 30;
       white-space: nowrap;
     }
+    /* ===== オープニング画面 ===== */
+    #opening-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      padding: 24px 20px 32px;
+      background: #07090f;
+      overflow: hidden;
+      transition: opacity 0.45s ease;
+    }
+    #opening-screen.fadeout {
+      opacity: 0;
+      pointer-events: none;
+    }
+    /* ブループリント風グリッド */
+    #opening-screen::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(59,130,246,0.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.055) 1px, transparent 1px);
+      background-size: 64px 64px;
+      pointer-events: none;
+    }
+    /* 中央グロー */
+    #opening-screen::after {
+      content: '';
+      position: absolute;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 480px; height: 480px;
+      background: radial-gradient(circle, rgba(37,99,235,0.14) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    #opening-inner {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 52px;
+      width: 100%;
+      max-width: 520px;
+    }
+    #opening-logo {
+      text-align: center;
+      line-height: 1;
+    }
+    #opening-eye {
+      font-size: 11px;
+      letter-spacing: 0.38em;
+      text-transform: uppercase;
+      color: #3b82f6;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    #opening-title {
+      font-size: clamp(38px, 11vw, 78px);
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #fff;
+      text-shadow: 0 0 60px rgba(59,130,246,0.45), 0 0 18px rgba(59,130,246,0.25);
+    }
+    #opening-subtitle {
+      font-size: clamp(13px, 3vw, 16px);
+      color: rgba(255,255,255,0.4);
+      margin-top: 10px;
+      letter-spacing: 0.06em;
+      font-weight: 500;
+    }
+    #opening-modes {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+    }
+    .mode-btn {
+      flex: 1;
+      min-width: 130px;
+      max-width: 200px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 22px 20px 20px;
+      color: #fff;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.2s, border-color 0.2s, transform 0.15s;
+      touch-action: manipulation;
+    }
+    #btn-creative:hover, #btn-creative:focus {
+      background: rgba(37,99,235,0.2);
+      border-color: rgba(59,130,246,0.55);
+      transform: translateY(-3px);
+    }
+    #btn-survival:hover, #btn-survival:focus {
+      background: rgba(239,68,68,0.18);
+      border-color: rgba(239,68,68,0.5);
+      transform: translateY(-3px);
+    }
+    .mode-btn:active { transform: scale(0.96) !important; }
+    .mode-btn-icon { font-size: 34px; margin-bottom: 10px; display: block; }
+    .mode-btn-title {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      margin-bottom: 6px;
+    }
+    .mode-btn-desc {
+      font-size: 10.5px;
+      color: rgba(255,255,255,0.45);
+      line-height: 1.5;
+    }
+    #opening-footer {
+      position: relative;
+      z-index: 1;
+      font-size: 10px;
+      color: rgba(255,255,255,0.22);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-top: auto;
+    }
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -583,6 +714,30 @@
 <body>
 
   <div id="canvas-container"></div>
+
+  <!-- ========== オープニング画面 ========== -->
+  <div id="opening-screen">
+    <div id="opening-inner">
+      <div id="opening-logo">
+        <div id="opening-eye">3D</div>
+        <div id="opening-title">BLOCK CRAFT</div>
+        <div id="opening-subtitle">Build · Drive · Survive</div>
+      </div>
+      <div id="opening-modes">
+        <button class="mode-btn" id="btn-creative" onclick="startCreativeMode()">
+          <span class="mode-btn-icon">🏗</span>
+          <div class="mode-btn-title">クリエイティブ</div>
+          <div class="mode-btn-desc">ブロックを自由に<br>組み立てよう</div>
+        </button>
+        <button class="mode-btn" id="btn-survival" onclick="startSurvivalMode()">
+          <span class="mode-btn-icon">⚔</span>
+          <div class="mode-btn-title">サバイバル</div>
+          <div class="mode-btn-desc">ビークルを操り<br>戦場へ飛び込め</div>
+        </button>
+      </div>
+    </div>
+    <div id="opening-footer">Tap to start</div>
+  </div>
 
   <!-- 左側 バーチャルパッド (視点操作) -->
   <div id="joystick-zone">
@@ -2836,6 +2991,57 @@
     autoLoad();
 
     // ループ処理
+    // ===== オープニング =====
+    function startCreativeMode() {
+      const el = document.getElementById('opening-screen');
+      el.classList.add('fadeout');
+      setTimeout(() => { el.style.display = 'none'; }, 450);
+      // build モードは既定状態なのでそのまま
+    }
+
+    function startSurvivalMode() {
+      const el = document.getElementById('opening-screen');
+      el.classList.add('fadeout');
+      setTimeout(() => {
+        el.style.display = 'none';
+        spawnStarterVehicle();
+        enterSurvivalMode();
+      }, 450);
+    }
+
+    // スターター自機を生成する（ブロックを直接配置）
+    function spawnStarterVehicle() {
+      clearAllBlocksSilent();
+
+      // vehicle layout (top-view, Z+ = forward)
+      // body: 2×4 chassis centered at origin
+      // cockpit2x2: on front half of body (high-Z side)
+      // 4 wheels at corners
+      const defs = [
+        { type: '2x4',        color: 0x4a5568, rot: 0, tilt: null, x: -1, hy: 0, z: -2 },
+        { type: 'cockpit2x2', color: 0x1e3a5f, rot: 0, tilt: null, x: -1, hy: 2, z:  0 },
+        { type: 'wheel',      color: 0x111111, rot: 0, tilt: null, x: -2, hy: 0, z:  1 }, // FL
+        { type: 'wheel',      color: 0x111111, rot: 0, tilt: null, x:  1, hy: 0, z:  1 }, // FR
+        { type: 'wheel',      color: 0x111111, rot: 0, tilt: null, x: -2, hy: 0, z: -2 }, // RL
+        { type: 'wheel',      color: 0x111111, rot: 0, tilt: null, x:  1, hy: 0, z: -2 }, // RR
+      ];
+
+      defs.forEach(({ type, color, rot, tilt, x, hy, z }) => {
+        const group = createBlockMesh(type, color, rot, tilt);
+        group.position.set(x, hy * 0.5, z);
+        scene.add(group);
+        const cells = getOccupiedCells(x, hy, z, type, rot, tilt);
+        cells.forEach(k => occupiedGrid.set(k, group));
+        group.traverse(c => {
+          if (c.isMesh) { c.userData.rootGroup = group; blockMeshes.push(c); }
+        });
+        blocksHistory.push({ group, cells, type, color, rot, tilt });
+      });
+
+      updateBlockCount();
+      autoSave();
+    }
+
     function animate(now = 0) {
       requestAnimationFrame(animate);
 
