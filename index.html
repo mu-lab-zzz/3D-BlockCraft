@@ -3020,10 +3020,10 @@
       const defs = [
         { type: '2x4',        color: 0x4a5568, rot: 0, tilt: null, x: -1, hy: 0, z: -2 },
         { type: 'cockpit2x2', color: 0x1e3a5f, rot: 0, tilt: null, x: -1, hy: 2, z:  0 },
-        { type: 'wheel',      color: 0x111111, rot: 0, tilt: null, x: -2, hy: 0, z:  1 }, // FL
-        { type: 'wheel',      color: 0x111111, rot: 0, tilt: null, x:  1, hy: 0, z:  1 }, // FR
-        { type: 'wheel',      color: 0x111111, rot: 0, tilt: null, x: -2, hy: 0, z: -2 }, // RL
-        { type: 'wheel',      color: 0x111111, rot: 0, tilt: null, x:  1, hy: 0, z: -2 }, // RR
+        { type: 'wheel',      color: 0x111111, rot: 180, tilt: null, x: -2, hy: 0, z:  1 }, // FL (axle → -X)
+        { type: 'wheel',      color: 0x111111, rot:   0, tilt: null, x:  1, hy: 0, z:  1 }, // FR (axle → +X)
+        { type: 'wheel',      color: 0x111111, rot: 180, tilt: null, x: -2, hy: 0, z: -2 }, // RL (axle → -X)
+        { type: 'wheel',      color: 0x111111, rot:   0, tilt: null, x:  1, hy: 0, z: -2 }, // RR (axle → +X)
       ];
 
       defs.forEach(({ type, color, rot, tilt, x, hy, z }) => {
