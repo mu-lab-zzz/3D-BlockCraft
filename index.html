@@ -739,7 +739,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         </button>
       </div>
     </div>
-    <div id="opening-footer">Tap to start</div>
+    <div id="opening-footer">Tap to start<br><span style="font-size:10px;opacity:.55">build 2026-08-06a · physics</span></div>
   </div>
 
   <!-- 左側 バーチャルパッド (視点操作) -->
@@ -853,6 +853,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     <div class="survival-badge">
       <div class="survival-num" id="survival-gear" style="color:#22c55e">D</div>
       <div class="survival-badge-label">ギア</div>
+    </div>
+    <div class="survival-badge">
+      <div class="survival-num" id="survival-engine" style="font-size:11px;color:#f87171">-</div>
+      <div class="survival-badge-label">物理</div>
     </div>
   </div>
 
@@ -991,9 +995,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     const WHEEL_GROUND_OFFSET  = 0.83;  // タイヤ半径 - ハブY中心 (1.33 - 0.5)
     const TYRE_RADIUS          = 1.33;  // R + tubeR of the torus
     const SUSP_REST_LEN        = 0.35;  // サスペンション自然長
-    const VEHICLE_ENGINE_FORCE = 2200;
+    const VEHICLE_ENGINE_FORCE = 2200;  // fallback（通常は質量比例で上書き）
     const VEHICLE_STEER_MAX    = 0.52;
     const VEHICLE_BRAKE_FORCE  = 40;
+    let engineForcePerWheel    = VEHICLE_ENGINE_FORCE; // buildVehiclePhysics で質量比例に設定
 
     let terrainObjects = [];
     let terrainBuilt   = false;
@@ -2572,10 +2577,29 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
       gameMode = 'survival';
 
-      // 全ブロックの重心を計算
+      // 質量加重の重心を計算（ブロックのジオメトリ中心ベース）
+      // コーナー基準の group.position を平均すると重心がずれ、
+      // 左右ホイールが COM に非対称になり直進時に勝手に曲がる
       vehicleCentroid.set(0, 0, 0);
-      blocksHistory.forEach(h => vehicleCentroid.add(h.group.position));
-      vehicleCentroid.divideScalar(blocksHistory.length);
+      let centroidMass = 0;
+      blocksHistory.forEach(h => {
+        const m = getBlockMass(h.type);
+        const p = h.group.position;
+        let cx, cy, cz;
+        if (h.type === 'wheel') {
+          // ホイールはタイヤ中心を質量中心とみなす
+          const rs = (Math.round(h.rot / 90) % 4 + 4) % 4;
+          const wax = rs === 0 ? 1 : rs === 2 ? -1 : 0;
+          const waz = rs === 1 ? 1 : rs === 3 ? -1 : 0;
+          cx = p.x + wax; cy = p.y + 0.5; cz = p.z + waz;
+        } else {
+          const dim = getBlockDimensions(h.type, h.rot);
+          cx = p.x + dim.w / 2 - 0.5; cy = p.y + dim.h / 2; cz = p.z + dim.d / 2 - 0.5;
+        }
+        vehicleCentroid.x += cx * m; vehicleCentroid.y += cy * m; vehicleCentroid.z += cz * m;
+        centroidMass += m;
+      });
+      vehicleCentroid.divideScalar(centroidMass);
 
       // 元の位置/回転を保存（localPos = chassis-local オフセット）
       vehicleBlocksData = blocksHistory.map(h => ({
@@ -2611,6 +2635,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (!terrainBuilt) { buildTerrainObjects(); terrainBuilt = true; }
       terrainObjects.forEach(o => { o.visible = true; });
       buildVehiclePhysics();
+
+      // 物理エンジン動作状態を HUD に表示（ON=cannon-es / OFF=キネマティック）
+      const engEl = document.getElementById('survival-engine');
+      if (rayVehicle && chassisBody) { engEl.textContent = 'ON';  engEl.style.color = '#22c55e'; }
+      else                           { engEl.textContent = 'OFF'; engEl.style.color = '#f87171'; }
 
       // サバイバル UI を表示
       document.getElementById('survival-hud').style.display  = 'flex';
@@ -2889,6 +2918,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         });
       });
 
+      // エンジン力を質量比例で決定（過大な力はウィリー→前輪浮き→操舵不能を招く）
+      const rearCount = Math.max(1, wheelInfosMeta.filter(m => m.isRear).length);
+      engineForcePerWheel = totalMass * VEHICLE_ACCEL * 1.3 / rearCount;
+
       rayVehicle.addToWorld(physicsWorld);
     }
 
@@ -2990,10 +3023,18 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
       if (rayVehicle && chassisBody) {
         // ===== Cannon-es 物理 =====
-        const engineForce = gasInput * VEHICLE_ENGINE_FORCE;
+        const spdNow = Math.hypot(chassisBody.velocity.x, chassisBody.velocity.z);
+
+        // cannon-es RaycastVehicle は正のエンジンフォースで -Z に進むため符号反転（W = +Z 前進）
+        // 最高速度到達後はエンジンカット
+        let engineForce = -gasInput * engineForcePerWheel;
+        if (spdNow > VEHICLE_MAX_SPEED * 1.35) engineForce = 0;
 
         // ステアリング補間（瞬時切り替えではなく滑らかに追従）
-        const targetSteer = -steerInput * VEHICLE_STEER_MAX;
+        // キネマティック時代と同じ回転方向（D = yaw 減少 = 右折）→ 負符号
+        // 速度感応: 高速時は舵角を絞ってスピンを防ぐ
+        const steerScale = 1 / (1 + spdNow * 0.06);
+        const targetSteer = -steerInput * VEHICLE_STEER_MAX * steerScale;
         currentSteer += (targetSteer - currentSteer) * Math.min(1, STEER_SPEED * dt);
 
         const isBraking = Math.abs(gasInput) < 0.05;
