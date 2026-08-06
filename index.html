@@ -948,7 +948,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06l · workshop</span>
+      <span class="footer-version">build 2026-08-06m · workshop</span>
     </div>
   </div>
 
@@ -1214,6 +1214,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let survivalCamReady = false;
     let lastSurvivalTime = 0;
     let survivalCamTheta = Math.PI;      // π = 車両真後ろ
+    let survivalCamPhi   = 1.2;          // 垂直角（0=真上, PI/2=水平）
 
     const VEHICLE_MAX_SPEED  = 14;
     const VEHICLE_ACCEL      = 9;
@@ -2204,7 +2205,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         player.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
       } else {
         // サバイバル: ピンチ中はカメラ回転をスキップ
-        if (!survivalPinching) survivalCamTheta -= dx * 0.005;
+        if (!survivalPinching) {
+          survivalCamTheta -= dx * 0.005;
+          survivalCamPhi = Math.max(0.15, Math.min(Math.PI * 0.62, survivalCamPhi + dy * 0.005));
+        }
       }
     });
     window.addEventListener('pointerup', (e) => {
@@ -2892,6 +2896,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       vehicleState.yaw   = 0;
       vehicleState.speed = 0;
       survivalCamTheta   = Math.PI;
+      survivalCamPhi     = 1.2;
       survivalCamReady   = false;
       lastSurvivalTime   = performance.now();
       survivalKeys.w = survivalKeys.s = survivalKeys.a = survivalKeys.d = false;
@@ -3061,11 +3066,15 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const sx = smoothedVehiclePos.x;
       const sy = smoothedVehiclePos.y;
       const sz = smoothedVehiclePos.z;
-      const camX = sx + Math.sin(ang) * survivalCamDist;
-      const camZ = sz + Math.cos(ang) * survivalCamDist;
+      // 球座標でカメラ位置を計算（phi=垂直角, ang=水平角）
+      const sinPhi = Math.sin(survivalCamPhi);
+      const cosPhi = Math.cos(survivalCamPhi);
+      const camX = sx + survivalCamDist * sinPhi * Math.sin(ang);
+      const camZ = sz + survivalCamDist * sinPhi * Math.cos(ang);
+      const camY = sy + survivalCamDist * cosPhi;
       const camFloor = getTerrainHeight(camX, camZ) + 2.5;
-      camera.position.set(camX, Math.max(sy + SURVIVAL_CAM_H, camFloor), camZ);
-      camera.lookAt(sx, sy + 1.8, sz);
+      camera.position.set(camX, Math.max(camY, camFloor), camZ);
+      camera.lookAt(sx, sy + 1.2, sz);
     }
 
     // 地形高さ関数（sin波の重ね合わせ、中心20単位は平坦）
