@@ -948,7 +948,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06n · workshop</span>
+      <span class="footer-version">build 2026-08-06o · workshop</span>
     </div>
   </div>
 
@@ -2972,7 +2972,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       document.getElementById('fps-edit-btns').style.display   = 'flex';
       document.getElementById('survival-hud').style.display    = 'none';
       document.getElementById('survival-hint').style.display   = 'none';
-      document.getElementById('survival-enter-btn').style.display = survivalWorkshop ? '' : 'none';
+      document.getElementById('survival-enter-btn').style.display = survivalWorkshop ? 'block' : 'none';
       document.getElementById('joystick-label').textContent    = '移動';
       updateBlockCount();
       fpsLookTouchId = null;
@@ -3735,7 +3735,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function _launchSurvivalWorkshop(loadFn) {
       survivalWorkshop = true;
       document.getElementById('btn-surv-save-menu').style.display = '';
-      document.getElementById('survival-enter-btn').style.display = '';
+      document.getElementById('survival-enter-btn').style.display = 'block';
       const el = document.getElementById('opening-screen');
       el.classList.add('fadeout');
       setTimeout(() => {
