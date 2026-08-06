@@ -2845,7 +2845,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const lx = group.position.x - vehicleCentroid.x;
         const lz = group.position.z - vehicleCentroid.z;
 
-        // アクスル方向をrotから決定
+        // ローカル軸方向（ブロック自身のローカル空間）
         const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
         let ax = 0, az = 0;
         if      (rotSteps === 0) ax =  1;
@@ -2853,32 +2853,38 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         else if (rotSteps === 1) az =  1;
         else                     az = -1;
 
-        // サスペンション接続点: タイヤ中心より restLength だけ上
-        // タイヤ中心 world_y = chassis_y + connY - restLen = groundY + TYRE_RADIUS
-        const connX = lx + ax;
+        // ローカル→シャーシローカル変換: ホイールブロックのY回転を適用
+        // FL(rot=180)はグループがRy(π)なのでローカル-Xがシャーシ+X方向になる
+        const origRotY = group.rotation.y;
+        const c = Math.cos(origRotY), s = Math.sin(origRotY);
+        const cax = ax * c + az * s;   // chassis-local axle X
+        const caz = -ax * s + az * c;  // chassis-local axle Z
+
+        // タイヤ中心のシャーシローカル座標 = グループ位置 + ワールド軸オフセット
+        const connX = lx + cax;
         const connY = (0.5 - vehicleCentroid.y) + SUSP_REST_LEN;
-        const connZ = lz;
+        const connZ = lz + caz;
 
         rayVehicle.addWheel({
           radius:                      TYRE_RADIUS,
           directionLocal:              new CANNON.Vec3(0, -1, 0),
-          axleLocal:                   new CANNON.Vec3(ax, 0, az),
+          axleLocal:                   new CANNON.Vec3(cax, 0, caz),  // 正しいシャーシローカル軸
           chassisConnectionPointLocal: new CANNON.Vec3(connX, connY, connZ),
-          suspensionStiffness:         40,    // 適度な硬さ
+          suspensionStiffness:         40,
           suspensionRestLength:        SUSP_REST_LEN,
-          frictionSlip:                5.0,   // グリップ強め（横滑り抑制）
-          dampingRelaxation:           2.5,   // 伸び側ダンパー
-          dampingCompression:          3.0,   // 縮み側ダンパー（柔らか目）
+          frictionSlip:                5.0,
+          dampingRelaxation:           2.5,
+          dampingCompression:          3.0,
           maxSuspensionForce:          200000,
-          rollInfluence:               0.05,  // 微量のロール許可
-          maxSuspensionTravel:         0.6,   // 段差乗り越え余裕
+          rollInfluence:               0.05,
+          maxSuspensionTravel:         0.6,
         });
 
-        // 視覚同期用メタデータ（group, 初期Y回転, アクスル方向）を保存
+        // 視覚同期: ax/az はローカル値を保存（updateVehicleTransformでapplyQuaternionして変換）
         wheelInfosMeta.push({
           isRear:   lz <= 0,
           group,
-          origRotY: group.rotation.y,
+          origRotY,
           ax, az,
         });
       });
