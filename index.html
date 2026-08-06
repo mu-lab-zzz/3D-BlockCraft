@@ -797,6 +797,8 @@
       if (type === 'cyl' || type === 'cyl05') return { w: 1, d: 1, h: 1 };
       if (type === 'cylp' || type === 'cyl05p') return { w: 1, d: 1, h: 0.5 };
       if (type === 'connector') return { w: 1, d: 1, h: 1 };
+      const cylSize = getLargeCylSize(type);
+      if (cylSize !== null) return { w: cylSize, d: cylSize, h: type.endsWith('p') ? 0.5 : 1.0 };
       const isPlate = type.endsWith('p');
       const base = isPlate ? type.slice(0, -1) : type;
       const parts = base.split('x');
@@ -813,6 +815,8 @@
       if (type === 'cyl05')   return '細柱';
       if (type === 'cyl05p')  return '細柱薄';
       if (type === 'connector') return '接続面';
+      const cylSize = getLargeCylSize(type);
+      if (cylSize !== null) return `円柱${cylSize}${type.endsWith('p') ? '薄' : ''}`;
       const isPlate = type.endsWith('p');
       const base = isPlate ? type.slice(0, -1) : type;
       const [w, d] = base.split('x');
@@ -821,8 +825,8 @@
 
     function getOccupiedCells(originX, originHY, originZ, type, rot, tilt) {
       if (type === 'wheel') return getWheelCells(originX, originHY, originZ, rot);
-      // 横倒し円柱: 実効高さ = 直径
-      if (tilt && isCylinderType(type)) {
+      // 横倒し円柱: 実効高さ = 直径（小型円柱のみ）
+      if (tilt && isTiltableCylinder(type)) {
         const diameter = (type === 'cyl05' || type === 'cyl05p') ? 0.5 : 1.0;
         const hCells = Math.max(1, Math.round(diameter * 2));
         const cells = [];
@@ -968,6 +972,23 @@
     function createCylinderMesh(type, color, tilt) {
       const group = new THREE.Group();
       const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+
+      const cylSize = getLargeCylSize(type);
+      if (cylSize !== null) {
+        // 大型円柱 (2×2 〜 5×5)
+        const isThin = type.endsWith('p');
+        const h = isThin ? 0.5 : 1.0;
+        const radius = cylSize / 2 - 0.01;
+        const cx = cylSize / 2 - 0.5; // 標準ブロックと同じオフセット規則
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, h - 0.01, Math.max(24, cylSize * 8)), mat);
+        body.castShadow = true;
+        body.receiveShadow = true;
+        body.position.set(cx, h / 2, cx);
+        group.add(body);
+        return group;
+      }
+
+      // 小型円柱 (1×1 / 0.5径)
       const isHalf = type === 'cyl05' || type === 'cyl05p';
       const isThin = type === 'cylp'  || type === 'cyl05p';
       const radius = isHalf ? 0.245 : 0.49;
@@ -977,8 +998,8 @@
       body.castShadow = true;
       body.receiveShadow = true;
       body.position.set(0, h / 2, 0);
-      if (tilt === 'z') body.rotation.z = Math.PI / 2; // X方向に横倒し
-      if (tilt === 'x') body.rotation.x = Math.PI / 2; // Z方向に横倒し
+      if (tilt === 'z') body.rotation.z = Math.PI / 2;
+      if (tilt === 'x') body.rotation.x = Math.PI / 2;
       group.add(body);
 
       if (!tilt) {
@@ -1050,11 +1071,21 @@
     }
 
     function createCylinderPreviewMesh(type, tilt) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
+
+      const cylSize = getLargeCylSize(type);
+      if (cylSize !== null) {
+        // 大型円柱プレビュー — previewMesh.positionがブロック中心に置かれるのでそのまま使える
+        const isThin = type.endsWith('p');
+        const h = isThin ? 0.5 : 1.0;
+        const radius = cylSize / 2 - 0.01;
+        return new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, h - 0.02, Math.max(24, cylSize * 8)), mat);
+      }
+
       const isHalf = type === 'cyl05' || type === 'cyl05p';
       const isThin = type === 'cylp'  || type === 'cyl05p';
       const radius = isHalf ? 0.245 : 0.49;
       const h = isThin ? 0.5 : 1.0;
-      const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
       const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, h - 0.02, 16), mat);
       if (tilt === 'z') mesh.rotation.z = Math.PI / 2;
       if (tilt === 'x') mesh.rotation.x = Math.PI / 2;
@@ -1484,7 +1515,19 @@
       updateCameraPosition();
     }, { passive: false });
 
+    function getLargeCylSize(type) {
+      // 'cyl2'/'cyl2p'...'cyl5'/'cyl5p' → 2..5  それ以外 → null
+      const m = type.match(/^cyl([2-9]\d*)p?$/);
+      return m ? parseInt(m[1]) : null;
+    }
+
     function isCylinderType(type) {
+      return type === 'cyl' || type === 'cylp' || type === 'cyl05' || type === 'cyl05p'
+          || getLargeCylSize(type) !== null;
+    }
+
+    // tilt(横倒し)を適用できる円柱型（径 ≤ 1 のみ）
+    function isTiltableCylinder(type) {
       return type === 'cyl' || type === 'cylp' || type === 'cyl05' || type === 'cyl05p';
     }
 
@@ -1527,7 +1570,7 @@
 
           // 接続面ヒット検出
           const connFace = detectConnectorFace(intersects);
-          const newTilt = (connFace && isCylinderType(currentBlockType))
+          const newTilt = (connFace && isTiltableCylinder(currentBlockType))
             ? (connFace.axleX !== 0 ? 'z' : 'x')
             : null;
           if (newTilt !== activeTilt) {
@@ -1693,10 +1736,10 @@
       const specialTypes = [
         { type: 'wheel',    label: 'タイヤ',  title: '回転でアクスル方向を変更' },
         { type: 'connector', label: '接続面', title: '回転で接続面の向きを変更' },
-        { type: 'cyl',      label: '円柱',   title: '直径1 高さ1の円柱' },
-        { type: 'cylp',     label: '円柱薄', title: '直径1 高さ0.5の円柱' },
-        { type: 'cyl05',    label: '細柱',   title: '直径0.5 高さ1の円柱' },
-        { type: 'cyl05p',   label: '細柱薄', title: '直径0.5 高さ0.5の円柱' },
+        { type: 'cyl',      label: '円柱',   title: '直径1 高さ1' },
+        { type: 'cylp',     label: '円柱薄', title: '直径1 高さ0.5' },
+        { type: 'cyl05',    label: '細柱',   title: '直径0.5 高さ1' },
+        { type: 'cyl05p',   label: '細柱薄', title: '直径0.5 高さ0.5' },
       ];
       specialTypes.forEach(({ type, label, title }) => {
         const btn = document.createElement('button');
@@ -1707,13 +1750,36 @@
         specialGrid.appendChild(btn);
       });
       picker.appendChild(specialGrid);
+
+      // 大型円柱セクション
+      const largeCylTitle = document.createElement('div');
+      largeCylTitle.className = 'bp-section-title';
+      largeCylTitle.textContent = '◯ 大型円柱';
+      picker.appendChild(largeCylTitle);
+
+      const largeCylGrid = document.createElement('div');
+      largeCylGrid.className = 'bp-grid';
+      [2, 3, 4, 5].forEach(n => {
+        ['', 'p'].forEach(suffix => {
+          const type = `cyl${n}${suffix}`;
+          const label = `円柱${n}${suffix === 'p' ? '薄' : ''}`;
+          const title = `直径${n} 高さ${suffix === 'p' ? '0.5' : '1'}`;
+          const btn = document.createElement('button');
+          btn.className = 'opt-btn' + (currentBlockType === type ? ' active' : '');
+          btn.textContent = label;
+          btn.title = title;
+          btn.addEventListener('click', () => selectBlockType(type, btn));
+          largeCylGrid.appendChild(btn);
+        });
+      });
+      picker.appendChild(largeCylGrid);
     }
 
     function selectBlockType(type, btn) {
       currentBlockType = type;
       snapOffsetX = 0;
       snapOffsetZ = 0;
-      if (!isCylinderType(type)) activeTilt = null;
+      if (!isTiltableCylinder(type)) activeTilt = null;
       document.querySelectorAll('#block-picker .opt-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       updatePreviewMesh();
@@ -2028,7 +2094,7 @@
         } else {
           // 接続面ヒット検出
           const connFace = detectConnectorFace(hits);
-          const newTilt = (connFace && isCylinderType(currentBlockType))
+          const newTilt = (connFace && isTiltableCylinder(currentBlockType))
             ? (connFace.axleX !== 0 ? 'z' : 'x')
             : null;
           if (newTilt !== activeTilt) {
