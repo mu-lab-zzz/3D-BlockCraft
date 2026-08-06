@@ -794,6 +794,13 @@
     // --- ロジック関数 ---
     function getBlockDimensions(type, rot = currentRotation) {
       if (type === 'wheel') return { w: 1, d: 1, h: 1 };
+      if (isLargeWheelType(type)) {
+        const spec = getLargeWheelSpec(type);
+        const D = spec.diameter, T = spec.thickness;
+        const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
+        const axleAlongX = (rotSteps === 0 || rotSteps === 2);
+        return { w: axleAlongX ? T : D, d: axleAlongX ? D : T, h: D };
+      }
       if (type === 'cyl' || type === 'cyl05') return { w: 1, d: 1, h: 1 };
       if (type === 'cylp' || type === 'cyl05p') return { w: 1, d: 1, h: 0.5 };
       if (type === 'connector') return { w: 1, d: 1, h: 1 };
@@ -816,6 +823,9 @@
 
     function blockLabel(type) {
       if (type === 'wheel')    return 'タイヤ';
+      if (type === 'wheel3')   return 'タイヤ径3';
+      if (type === 'wheel5')   return 'タイヤ径5';
+      if (type === 'wheel5t2') return 'タイヤ径5厚';
       if (type === 'cyl')     return '円柱';
       if (type === 'cylp')    return '円柱薄';
       if (type === 'cyl05')   return '細柱';
@@ -898,6 +908,7 @@
 
     function createBlockMesh(type, color, rot, tilt) {
       if (type === 'wheel') return createWheelMesh(color, rot);
+      if (isLargeWheelType(type)) return createLargeWheelMesh(type, color, rot);
       if (isCylinderType(type)) return createCylinderMesh(type, color, tilt);
       if (type === 'connector') return createConnectorMesh(color, rot);
       if (isCockpitType(type)) return createCockpitMesh(type, color, rot);
@@ -976,6 +987,90 @@
       if (axleX !== 0) rim.rotation.z = Math.PI / 2;
       else             rim.rotation.x = Math.PI / 2;
       group.add(rim);
+
+      return group;
+    }
+
+    function createLargeWheelMesh(type, color, rot) {
+      const group = new THREE.Group();
+      const spec = getLargeWheelSpec(type);
+      const D = spec.diameter, T = spec.thickness;
+      const dim = getBlockDimensions(type, rot);
+      const w = dim.w, d = dim.d, h = dim.h;
+
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.1 });
+      const tireMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.95 });
+
+      const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
+      const axleAlongX = (rotSteps === 0 || rotSteps === 2);
+
+      // Wheel center in group local space
+      const cx = w / 2 - 0.5, cy = h / 2, cz = d / 2 - 0.5;
+
+      // Torus parameters: outer_radius = R + tubeR ≈ h/2
+      let R, tubeR;
+      if (D === 3) {
+        R = 0.76; tubeR = 0.65;       // fat tire, 3-diameter
+      } else if (T === 1) {
+        R = 2.0;  tubeR = 0.47;       // thin tire, 5-diameter
+      } else {
+        R = 1.6;  tubeR = 0.87;       // fat tire, 5-diameter
+      }
+
+      // Tire torus
+      const tire = new THREE.Mesh(
+        new THREE.TorusGeometry(R, tubeR, 12, Math.max(24, D * 8)),
+        tireMat
+      );
+      tire.castShadow = true;
+      tire.position.set(cx, cy, cz);
+      if (axleAlongX) tire.rotation.y = Math.PI / 2;
+      group.add(tire);
+
+      // Hub cylinder (along axle axis)
+      const hubR = h * 0.10;
+      const hubH = T - 0.2;
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(hubR, hubR, hubH, 12), mat);
+      hub.castShadow = true;
+      hub.position.set(cx, cy, cz);
+      if (axleAlongX) hub.rotation.z = Math.PI / 2;
+      else            hub.rotation.x = Math.PI / 2;
+      group.add(hub);
+
+      // Hub end caps
+      const capGeo = new THREE.CylinderGeometry(hubR * 1.5, hubR * 1.5, 0.05, 12);
+      [-1, 1].forEach(side => {
+        const cap = new THREE.Mesh(capGeo, mat);
+        if (axleAlongX) {
+          cap.position.set(cx + side * hubH / 2, cy, cz);
+          cap.rotation.z = Math.PI / 2;
+        } else {
+          cap.position.set(cx, cy, cz + side * hubH / 2);
+          cap.rotation.x = Math.PI / 2;
+        }
+        group.add(cap);
+      });
+
+      // Spokes (for 5×5 wheels)
+      if (D >= 5) {
+        const numSpokes = 5;
+        const spokeLen = R - hubR - 0.1;
+        const spokeGeo = new THREE.CylinderGeometry(0.06, 0.06, spokeLen, 6);
+        for (let i = 0; i < numSpokes; i++) {
+          const angle = (i / numSpokes) * Math.PI * 2;
+          const halfL = hubR + spokeLen / 2;
+          const spoke = new THREE.Mesh(spokeGeo, mat);
+          spoke.castShadow = true;
+          if (axleAlongX) {
+            spoke.position.set(cx, cy + Math.sin(angle) * halfL, cz + Math.cos(angle) * halfL);
+            spoke.rotation.x = Math.PI / 2 - angle;
+          } else {
+            spoke.position.set(cx + Math.cos(angle) * halfL, cy + Math.sin(angle) * halfL, cz);
+            spoke.rotation.z = angle - Math.PI / 2;
+          }
+          group.add(spoke);
+        }
+      }
 
       return group;
     }
@@ -1652,6 +1747,17 @@
       return type === 'cockpit1x1' || type === 'cockpit2x2' || type === 'cockpit2x3' || type === 'cockpit2x4';
     }
 
+    function isLargeWheelType(type) {
+      return type === 'wheel3' || type === 'wheel5' || type === 'wheel5t2';
+    }
+
+    function getLargeWheelSpec(type) {
+      if (type === 'wheel3')   return { diameter: 3, thickness: 2 };
+      if (type === 'wheel5')   return { diameter: 5, thickness: 1 };
+      if (type === 'wheel5t2') return { diameter: 5, thickness: 2 };
+      return null;
+    }
+
     // 接続面ヒット検出: ヒットリストの先頭3件からコネクターブロックの接続面を探す
     function detectConnectorFace(intersects) {
       const limit = Math.min(intersects.length, 3);
@@ -1894,6 +2000,28 @@
         });
       });
       picker.appendChild(largeCylGrid);
+
+      // 大型タイヤセクション
+      const largeWheelTitle = document.createElement('div');
+      largeWheelTitle.className = 'bp-section-title';
+      largeWheelTitle.textContent = '⊙ 大型タイヤ';
+      picker.appendChild(largeWheelTitle);
+
+      const largeWheelGrid = document.createElement('div');
+      largeWheelGrid.className = 'bp-grid';
+      [
+        { type: 'wheel3',   label: 'タイヤ径3', title: '直径3 厚み2' },
+        { type: 'wheel5',   label: 'タイヤ径5', title: '直径5 厚み1' },
+        { type: 'wheel5t2', label: 'タイヤ径5厚', title: '直径5 厚み2' },
+      ].forEach(({ type, label, title }) => {
+        const btn = document.createElement('button');
+        btn.className = 'opt-btn' + (currentBlockType === type ? ' active' : '');
+        btn.textContent = label;
+        btn.title = title;
+        btn.addEventListener('click', () => selectBlockType(type, btn));
+        largeWheelGrid.appendChild(btn);
+      });
+      picker.appendChild(largeWheelGrid);
 
       // コクピットセクション
       const cockpitTitle = document.createElement('div');
