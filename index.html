@@ -3699,6 +3699,41 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       [[0,0,0],[0,1,0],[1,1,0],[1,0,0]]
     ];
 
+    // ブロック上面にポッチ（スタッド）の頂点をカラーグループに直接追加
+    const _WB_STUD_N  = 8;   // 円筒の分割数
+    const _WB_STUD_R  = 0.2; // 半径（車両ブロックと同じ）
+    const _WB_STUD_HH = 0.06; // 半高さ（合計 0.12）
+    function _addStudVerts(g, bx, by, bz) {
+      const topY   = by + 1;
+      const centerY = topY + _WB_STUD_HH;
+      const base   = g.vtx;
+      // 上面キャップ中心
+      g.pos.push(bx, centerY + _WB_STUD_HH, bz); g.nor.push(0, 1, 0);
+      for (let i = 0; i < _WB_STUD_N; i++) {
+        const a = (i / _WB_STUD_N) * Math.PI * 2;
+        const cx = Math.cos(a), cz = Math.sin(a);
+        // 上面リング（法線=上）
+        g.pos.push(bx + cx * _WB_STUD_R, centerY + _WB_STUD_HH, bz + cz * _WB_STUD_R); g.nor.push(0, 1, 0);
+        // 側面上（法線=外向き）
+        g.pos.push(bx + cx * _WB_STUD_R, centerY + _WB_STUD_HH, bz + cz * _WB_STUD_R); g.nor.push(cx, 0, cz);
+        // 側面下
+        g.pos.push(bx + cx * _WB_STUD_R, centerY - _WB_STUD_HH, bz + cz * _WB_STUD_R); g.nor.push(cx, 0, cz);
+      }
+      // 上面キャップ（扇形）
+      for (let i = 0; i < _WB_STUD_N; i++) {
+        const j = (i + 1) % _WB_STUD_N;
+        g.idx.push(base, base + 1 + j * 3, base + 1 + i * 3);
+      }
+      // 側面クワッド
+      for (let i = 0; i < _WB_STUD_N; i++) {
+        const j  = (i + 1) % _WB_STUD_N;
+        const s0 = base + 1 + i * 3 + 1, b0 = base + 1 + i * 3 + 2;
+        const s1 = base + 1 + j * 3 + 1, b1 = base + 1 + j * 3 + 2;
+        g.idx.push(s0, b0, b1, s0, b1, s1);
+      }
+      g.vtx += 1 + _WB_STUD_N * 3;
+    }
+
     function _rebuildChunk(cKey) {
       const entry = worldChunkMap.get(cKey);
       if (!entry) return;
@@ -3729,6 +3764,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           }
           g.idx.push(base, base+1, base+2, base, base+2, base+3);
           g.vtx += 4;
+        }
+        // 上にブロックがなければポッチを追加（draw call 増加なし）
+        if (!worldBlockMap.has(_wKey(x, y + 1, z))) {
+          _addStudVerts(g, x, y, z);
         }
       }
 
