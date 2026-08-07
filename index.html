@@ -1049,7 +1049,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-07r · outer-ring</span>
+      <span class="footer-version">build 2026-08-07s · outer-physics</span>
     </div>
   </div>
 
@@ -3437,6 +3437,35 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         hfBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
         hfBody.position.set(-300, 0, 300);
         physicsWorld.addBody(hfBody);
+
+        // 外周リング物理（50m粗ハイトフィールド × 4、内側±300m の外を覆う）
+        const OELEM = 50;
+        const outerHFDefs = [
+          // North: x[-1200,1200], z[-1200,-300]
+          { nx: 49, nz: 19, px: -1200, pz: -300,
+            hFn: (i, j) => getTerrainHeight(-1200 + i * OELEM, -300 - j * OELEM) },
+          // South: x[-1200,1200], z[300,1200]
+          { nx: 49, nz: 19, px: -1200, pz: 1200,
+            hFn: (i, j) => getTerrainHeight(-1200 + i * OELEM, 1200 - j * OELEM) },
+          // West: x[-1200,-300], z[-300,300]
+          { nx: 19, nz: 13, px: -1200, pz: 300,
+            hFn: (i, j) => getTerrainHeight(-1200 + i * OELEM, 300 - j * OELEM) },
+          // East: x[300,1200], z[-300,300]
+          { nx: 19, nz: 13, px: 300, pz: 300,
+            hFn: (i, j) => getTerrainHeight(300 + i * OELEM, 300 - j * OELEM) },
+        ];
+        for (const { nx, nz, px, pz, hFn } of outerHFDefs) {
+          const od = [];
+          for (let i = 0; i < nx; i++) {
+            od.push([]);
+            for (let j = 0; j < nz; j++) od[i].push(hFn(i, j));
+          }
+          const ob = new CANNON.Body({ mass: 0 });
+          ob.addShape(new CANNON.Heightfield(od, { elementSize: OELEM }));
+          ob.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+          ob.position.set(px, 0, pz);
+          physicsWorld.addBody(ob);
+        }
       } catch (e) {
         console.warn('Cannon-es 利用不可 — キネマティックモードで動作します:', e);
         physicsWorld = null;
@@ -4195,7 +4224,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           vehicleState.yaw -= steerInput * VEHICLE_TURN_SPEED * dt * Math.sign(vehicleState.speed);
         vehicleState.pos.x += Math.sin(vehicleState.yaw) * vehicleState.speed * dt;
         vehicleState.pos.z += Math.cos(vehicleState.yaw) * vehicleState.speed * dt;
-        const B = 295;
+        const B = 590;
         vehicleState.pos.x = Math.max(-B, Math.min(B, vehicleState.pos.x));
         vehicleState.pos.z = Math.max(-B, Math.min(B, vehicleState.pos.z));
         document.getElementById('survival-speed').textContent = Math.round(Math.abs(vehicleState.speed) * 3.6);
