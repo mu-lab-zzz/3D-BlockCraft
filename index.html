@@ -3700,12 +3700,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     ];
 
     // ブロック上面にポッチ（スタッド）の頂点をカラーグループに直接追加
-    const _WB_STUD_N  = 8;   // 円筒の分割数
-    const _WB_STUD_R  = 0.2; // 半径（車両ブロックと同じ）
-    const _WB_STUD_HH = 0.06; // 半高さ（合計 0.12）
+    // 車両ブロック 1x1 と完全に同じ寸法: r=0.2, h=0.12, N=12, center=y+1.02
+    const _WB_STUD_N  = 12;
+    const _WB_STUD_R  = 0.2;
+    const _WB_STUD_HH = 0.06;
     function _addStudVerts(g, bx, by, bz) {
-      const topY   = by + 1;
-      const centerY = topY + _WB_STUD_HH;
+      const centerY = by + 1.02; // 車両ブロックの stud.position.y = dim.h + 0.02
       const base   = g.vtx;
       // 上面キャップ中心
       g.pos.push(bx, centerY + _WB_STUD_HH, bz); g.nor.push(0, 1, 0);
@@ -3758,8 +3758,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           const verts = WB_FACE_VERTS[f];
           const n = WB_FACES[f].norm;
           const base = g.vtx;
+          // 車両ブロック 1x1 と同じ 0.01 ギャップ（各辺 0.005 ずつ縮小）
           for (const v of verts) {
-            g.pos.push(x + v[0] - 0.5, y + v[1], z + v[2] - 0.5);
+            g.pos.push(x + v[0] * 0.99 - 0.495, y + v[1] * 0.99 + 0.005, z + v[2] * 0.99 - 0.495);
             g.nor.push(n[0], n[1], n[2]);
           }
           g.idx.push(base, base+1, base+2, base, base+2, base+3);
