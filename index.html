@@ -1371,7 +1371,16 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let wbDeleteMode     = false;
     let wbPreviewMesh    = null;
     let wbTapStartX      = 0, wbTapStartY = 0;
+    let wbCurrClientX    = 0, wbCurrClientY = 0;
     const wbRaycaster    = new THREE.Raycaster();
+
+    function _clientToNDC(cx, cy) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      return {
+        x:  ((cx - rect.left) / rect.width)  * 2 - 1,
+        y: -((cy - rect.top)  / rect.height) * 2 + 1
+      };
+    }
 
     // ===== ワールドビルド補助 =====
     function _wKey(x, y, z) { return `${x}|${y}|${z}`; }
@@ -2346,9 +2355,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       fpsLookTouchId = e.pointerId;
       fpsLookLastX = e.clientX;
       fpsLookLastY = e.clientY;
-      // WB モード: タップ開始位置を記録
+      // WB モード: タップ開始位置を記録し、即座にプレビュー表示
       if (gameMode === 'survival' && worldBuildMode) {
         wbTapStartX = e.clientX; wbTapStartY = e.clientY;
+        wbCurrClientX = e.clientX; wbCurrClientY = e.clientY;
+        _updateWBPreview(e.clientX, e.clientY);
       }
     });
     window.addEventListener('pointermove', (e) => {
@@ -2361,8 +2372,19 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         player.yaw   -= dx * 0.003;
         player.pitch += dy * 0.003;
         player.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
+      } else if (gameMode === 'survival' && worldBuildMode) {
+        // WB モード: 移動量が小さい間はプレビュー更新、大きくなったらカメラ回転
+        wbCurrClientX = e.clientX; wbCurrClientY = e.clientY;
+        const movedTotal = Math.hypot(e.clientX - wbTapStartX, e.clientY - wbTapStartY);
+        if (movedTotal < 20) {
+          _updateWBPreview(e.clientX, e.clientY);
+        } else if (!survivalPinching) {
+          if (wbPreviewMesh) wbPreviewMesh.visible = false;
+          survivalCamTheta -= dx * 0.005;
+          survivalCamPhi = Math.max(0.15, Math.min(Math.PI * 0.62, survivalCamPhi + dy * 0.005));
+        }
       } else {
-        // ピンチ中はカメラ回転をスキップ
+        // 通常サバイバル: ピンチ中はカメラ回転をスキップ
         if (!survivalPinching) {
           survivalCamTheta -= dx * 0.005;
           survivalCamPhi = Math.max(0.15, Math.min(Math.PI * 0.62, survivalCamPhi + dy * 0.005));
@@ -2371,16 +2393,20 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     });
     window.addEventListener('pointerup', (e) => {
       if (e.pointerId === fpsLookTouchId) {
-        // WB モード: タップ判定（小さな移動 = タップ）
+        // WB モード: タップ判定（小さな移動 = タップ → 設置）
         if (gameMode === 'survival' && worldBuildMode) {
           const moved = Math.hypot(e.clientX - wbTapStartX, e.clientY - wbTapStartY);
-          if (moved < 12) _wbTapPlace();
+          if (moved < 20) _wbTapPlace(wbCurrClientX, wbCurrClientY);
+          if (wbPreviewMesh) wbPreviewMesh.visible = false;
         }
         fpsLookTouchId = null;
       }
     });
     window.addEventListener('pointercancel', (e) => {
-      if (e.pointerId === fpsLookTouchId) fpsLookTouchId = null;
+      if (e.pointerId === fpsLookTouchId) {
+        if (wbPreviewMesh) wbPreviewMesh.visible = false;
+        fpsLookTouchId = null;
+      }
     });
 
     // --- 🖐️ 画面タッチ（ズーム・パン・配置移動）制御 ---
@@ -3810,33 +3836,32 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     // ===== ワールドブロック: レイキャスト & プレビュー =====
-    function _getWBTarget() {
-      // 画面中心からレイを飛ばして地形 or ワールドブロックにヒット
-      wbRaycaster.setFromCamera({ x: 0, y: 0 }, camera);
-      // ワールドブロックメッシュを収集
+    // タッチ位置(clientX/Y)を NDC に変換してレイキャスト
+    function _getWBTarget(cx, cy) {
+      const ndc = _clientToNDC(cx, cy);
+      wbRaycaster.setFromCamera(ndc, camera);
       const wbMeshes = [];
       worldChunkMap.forEach(entry => { if (entry.mesh) wbMeshes.push(entry.mesh); });
-      // 地形メッシュ
       const targets = [survivalField, ...wbMeshes];
       const hits = wbRaycaster.intersectObjects(targets, false);
       if (hits.length === 0) return null;
       const hit = hits[0];
-      if (hit.distance > 60) return null; // 60m より遠は無視
+      if (hit.distance > 60) return null;
       return hit;
     }
 
-    function _updateWBPreview() {
+    // プレビューブロックを指定スクリーン座標のレイキャスト先に表示
+    function _updateWBPreview(cx, cy) {
       if (!worldBuildMode || wbDeleteMode) {
         if (wbPreviewMesh) wbPreviewMesh.visible = false;
         return;
       }
-      const hit = _getWBTarget();
+      const hit = _getWBTarget(cx, cy);
       if (!hit) { if (wbPreviewMesh) wbPreviewMesh.visible = false; return; }
 
-      // ノーマル方向にオフセットして配置位置を計算
       const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
       const px = Math.round(hit.point.x + n.x * 0.5);
-      const py = Math.floor(hit.point.y + n.y * 0.5);
+      const py = Math.round(hit.point.y + n.y * 0.5);
       const pz = Math.round(hit.point.z + n.z * 0.5);
 
       if (!wbPreviewMesh) {
@@ -3847,27 +3872,30 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         scene.add(wbPreviewMesh);
       }
       wbPreviewMesh.material.color.setHex(wbCurrentColor);
-      wbPreviewMesh.position.set(px, py + 0.5, pz);
+      wbPreviewMesh.position.set(px, py, pz);
       wbPreviewMesh.visible = true;
     }
 
-    function _wbTapPlace() {
-      const hit = _getWBTarget();
+    function _wbTapPlace(cx, cy) {
+      const hit = _getWBTarget(cx, cy);
       if (!hit) return;
+      const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
       if (wbDeleteMode) {
         if (hit.object.userData.isWorldBlock) {
-          const p = hit.point.clone().sub(
-            hit.face.normal.clone().transformDirection(hit.object.matrixWorld).multiplyScalar(0.5)
+          removeWorldBlock(
+            Math.round(hit.point.x - n.x * 0.5),
+            Math.round(hit.point.y - n.y * 0.5),
+            Math.round(hit.point.z - n.z * 0.5)
           );
-          removeWorldBlock(Math.round(p.x), Math.floor(p.y), Math.round(p.z));
           saveWorldBlocks();
         }
       } else {
-        const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
-        const px = Math.round(hit.point.x + n.x * 0.5);
-        const py = Math.floor(hit.point.y + n.y * 0.5);
-        const pz = Math.round(hit.point.z + n.z * 0.5);
-        placeWorldBlock(px, py, pz, wbCurrentColor);
+        placeWorldBlock(
+          Math.round(hit.point.x + n.x * 0.5),
+          Math.round(hit.point.y + n.y * 0.5),
+          Math.round(hit.point.z + n.z * 0.5),
+          wbCurrentColor
+        );
         saveWorldBlocks();
       }
     }
@@ -3875,7 +3903,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // ===== ワールドビルドモード: 入退出 =====
     function enterWorldBuildMode() {
       worldBuildMode = true;
-      document.getElementById('wb-crosshair').style.display  = 'block';
       document.getElementById('wb-panel').style.display      = 'flex';
       document.getElementById('wb-build-toggle-btn').classList.add('active');
       document.getElementById('wb-build-toggle-btn').textContent = '🚗 走行';
@@ -3884,7 +3911,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function exitWorldBuildMode() {
       worldBuildMode = false;
       if (wbPreviewMesh) wbPreviewMesh.visible = false;
-      document.getElementById('wb-crosshair').style.display  = 'none';
       document.getElementById('wb-panel').style.display      = 'none';
       document.getElementById('wb-build-toggle-btn').classList.remove('active');
       document.getElementById('wb-build-toggle-btn').textContent = '🧱 建設';
@@ -3954,7 +3980,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
       // WB モード中: 車両入力をゼロにして物理は維持
       if (worldBuildMode) {
-        _updateWBPreview();
         updateVehicleTransform();
         updateSurvivalCamera();
         updateBiomeAtmosphere(vehicleState.pos.x, vehicleState.pos.z);
