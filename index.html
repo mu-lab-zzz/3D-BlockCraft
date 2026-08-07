@@ -596,6 +596,108 @@
       z-index: 30;
       white-space: nowrap;
     }
+    /* ===== ワールドビルドモード ===== */
+    #wb-crosshair {
+      display: none;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 24px; height: 24px;
+      pointer-events: none;
+      z-index: 31;
+    }
+    #wb-crosshair::before, #wb-crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,0.85);
+      border-radius: 2px;
+    }
+    #wb-crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+    #wb-crosshair::after  { width: 100%; height: 2px; top: 50%; transform: translateY(-50%); }
+    #wb-panel {
+      display: none;
+      position: absolute;
+      bottom: calc(max(10px, env(safe-area-inset-bottom)) + 10px);
+      left: 15px;
+      background: rgba(10,15,30,0.82);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 18px;
+      padding: 12px 14px;
+      z-index: 32;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 220px;
+    }
+    #wb-panel-title {
+      color: rgba(255,255,255,0.5);
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+    #wb-swatches {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 5px;
+    }
+    .wb-swatch {
+      width: 24px; height: 24px;
+      border-radius: 6px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.1s, border-color 0.1s;
+      touch-action: manipulation;
+    }
+    .wb-swatch.active { border-color: #fff; transform: scale(1.2); }
+    .wb-swatch:active { transform: scale(0.9); }
+    #wb-delete-btn {
+      background: rgba(239,68,68,0.75);
+      border: 1px solid rgba(252,165,165,0.35);
+      color: #fff;
+      border-radius: 10px;
+      padding: 7px 0;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: background 0.15s, transform 0.1s;
+    }
+    #wb-delete-btn.active { background: rgba(239,68,68,1); border-color: #fff; }
+    #wb-delete-btn:active { transform: scale(0.95); }
+    #wb-drive-btn {
+      background: rgba(34,197,94,0.75);
+      border: 1px solid rgba(134,239,172,0.35);
+      color: #fff;
+      border-radius: 10px;
+      padding: 7px 0;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: background 0.15s, transform 0.1s;
+    }
+    #wb-drive-btn:active { transform: scale(0.95); }
+    #wb-build-toggle-btn {
+      pointer-events: auto;
+      background: rgba(234,179,8,0.85);
+      backdrop-filter: blur(8px);
+      color: #000;
+      border: 1px solid rgba(253,224,71,0.4);
+      padding: 10px 22px;
+      border-radius: 22px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform 0.1s;
+      white-space: nowrap;
+    }
+    #wb-build-toggle-btn:active { transform: scale(0.95); }
+    #wb-build-toggle-btn.active {
+      background: rgba(245,158,11,0.95);
+    }
     /* ===== オープニング画面 ===== */
     #opening-screen {
       position: fixed;
@@ -948,7 +1050,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06p · workshop</span>
+      <span class="footer-version">build 2026-08-06q · world-build</span>
     </div>
   </div>
 
@@ -1069,6 +1171,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   <!-- サバイバル HUD -->
   <div id="survival-hud">
     <button id="survival-exit-btn" onclick="exitSurvivalMode()">🏗 組立へ</button>
+    <button id="wb-build-toggle-btn" onclick="toggleWorldBuildMode()">🧱 建設</button>
     <div class="survival-badge">
       <div class="survival-num" id="survival-speed">0</div>
       <div class="survival-badge-label">km/h</div>
@@ -1085,6 +1188,17 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
   <!-- サバイバルモード カメラ操作ヒント -->
   <div id="survival-hint">⚔ サバイバルモード ｜ 右スワイプ: カメラ回転</div>
+
+  <!-- ワールドビルドモード クロスヘア -->
+  <div id="wb-crosshair"></div>
+
+  <!-- ワールドビルドモード パネル -->
+  <div id="wb-panel">
+    <div id="wb-panel-title">ワールドブロック</div>
+    <div id="wb-swatches"></div>
+    <button id="wb-delete-btn" onclick="toggleWBDelete()">🗑 削除モード</button>
+    <button id="wb-drive-btn" onclick="exitWorldBuildMode()">🚗 走行へ戻る</button>
+  </div>
 
   <!-- ワークショップ中のサバイバル移行ボタン（survival-exit-btn と同位置） -->
   <button id="survival-enter-btn" onclick="enterSurvivalMode()">⚔ サバイバルへ</button>
@@ -1238,6 +1352,32 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     let terrainObjects = [];
     let terrainBuilt   = false;
+
+    // ===== ワールドビルドシステム =====
+    const CHUNK_SIZE = 8;                        // チャンク1辺のブロック数
+    const WB_BLOCK   = 1.0;                      // ブロック1辺の実世界サイズ(m)
+    const WB_PALETTE = [
+      0xee2222, 0xff7700, 0xffcc00, 0x88cc00,
+      0x22aa44, 0x00bbcc, 0x2277ee, 0x7744ee,
+      0xdd44bb, 0xffffff, 0xaaaaaa, 0x555555,
+      0x222222, 0x8b5e3c, 0x3399ff, 0xff99cc
+    ];
+    // ブロックデータ: キー "{cx}_{cy}_{cz}" → { x,y,z,color }[]
+    const worldBlockMap  = new Map();            // 世界座標キー → color  (存在チェック)
+    const worldChunkMap  = new Map();            // チャンクキー → { blocks[], mesh, bodies[] }
+    const _wbDirtyChunks = new Set();
+    let worldBuildMode   = false;
+    let wbCurrentColor   = WB_PALETTE[0];
+    let wbDeleteMode     = false;
+    let wbPreviewMesh    = null;
+    let wbTapStartX      = 0, wbTapStartY = 0;
+    const wbRaycaster    = new THREE.Raycaster();
+
+    // ===== ワールドビルド補助 =====
+    function _wKey(x, y, z) { return `${x}|${y}|${z}`; }
+    function _cKey(cx, cy, cz) { return `${cx},${cy},${cz}`; }
+    function _worldToChunk(v) { return Math.floor(v / CHUNK_SIZE); }
+
     let chassisBody    = null;
     let rayVehicle     = null;
     let wheelInfosMeta = []; // { isRear, group, origRotY, ax, az } per physics wheel
@@ -2206,6 +2346,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       fpsLookTouchId = e.pointerId;
       fpsLookLastX = e.clientX;
       fpsLookLastY = e.clientY;
+      // WB モード: タップ開始位置を記録
+      if (gameMode === 'survival' && worldBuildMode) {
+        wbTapStartX = e.clientX; wbTapStartY = e.clientY;
+      }
     });
     window.addEventListener('pointermove', (e) => {
       if ((gameMode !== 'fps' && gameMode !== 'survival') || e.pointerId !== fpsLookTouchId) return;
@@ -2218,7 +2362,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         player.pitch += dy * 0.003;
         player.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
       } else {
-        // サバイバル: ピンチ中はカメラ回転をスキップ
+        // サバイバル WB モードではカメラ回転しない
+        if (worldBuildMode) return;
+        // ピンチ中はカメラ回転をスキップ
         if (!survivalPinching) {
           survivalCamTheta -= dx * 0.005;
           survivalCamPhi = Math.max(0.15, Math.min(Math.PI * 0.62, survivalCamPhi + dy * 0.005));
@@ -2226,7 +2372,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
     });
     window.addEventListener('pointerup', (e) => {
-      if (e.pointerId === fpsLookTouchId) fpsLookTouchId = null;
+      if (e.pointerId === fpsLookTouchId) {
+        // WB モード: タップ判定（小さな移動 = タップ）
+        if (gameMode === 'survival' && worldBuildMode) {
+          const moved = Math.hypot(e.clientX - wbTapStartX, e.clientY - wbTapStartY);
+          if (moved < 8) _wbTapPlace();
+        }
+        fpsLookTouchId = null;
+      }
     });
     window.addEventListener('pointercancel', (e) => {
       if (e.pointerId === fpsLookTouchId) fpsLookTouchId = null;
@@ -2934,6 +3087,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       initPhysicsWorld();
       if (!terrainBuilt) { buildTerrainObjects(); terrainBuilt = true; }
       terrainObjects.forEach(o => { o.visible = true; });
+      if (worldBlockMap.size === 0) loadWorldBlocks();
+      showWorldChunks(true);
       buildVehiclePhysics();
 
       // 物理エンジン動作状態を HUD に表示（ON=cannon-es / OFF=キネマティック）
@@ -2970,6 +3125,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       });
       vehicleBlocksData = [];
       gameMode = 'build';
+
+      // WB モード終了
+      if (worldBuildMode) exitWorldBuildMode();
+      saveWorldBlocks();
+      showWorldChunks(false);
 
       // ワールド復元（workshopモードでは床・グリッドは非表示のまま）
       survivalField.visible = false;
@@ -3516,11 +3676,292 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
     }
 
+    // ===== ワールドブロック: チャンクリビルド =====
+    const WB_FACES = [
+      { dir: [ 1,0,0], norm: [1,0,0] },
+      { dir: [-1,0,0], norm: [-1,0,0] },
+      { dir: [0, 1,0], norm: [0,1,0] },
+      { dir: [0,-1,0], norm: [0,-1,0] },
+      { dir: [0,0, 1], norm: [0,0,1] },
+      { dir: [0,0,-1], norm: [0,0,-1] }
+    ];
+    // 面の4頂点(単位立方体, corner offset)
+    const WB_FACE_VERTS = [
+      [[1,0,0],[1,1,0],[1,1,1],[1,0,1]],
+      [[0,0,1],[0,1,1],[0,1,0],[0,0,0]],
+      [[0,1,0],[0,1,1],[1,1,1],[1,1,0]],
+      [[0,0,1],[0,0,0],[1,0,0],[1,0,1]],
+      [[1,0,1],[1,1,1],[0,1,1],[0,0,1]],
+      [[0,0,0],[0,1,0],[1,1,0],[1,0,0]]
+    ];
+
+    function _rebuildChunk(cKey) {
+      const entry = worldChunkMap.get(cKey);
+      if (!entry) return;
+
+      // 既存メッシュ・ボディを破棄
+      if (entry.mesh) { scene.remove(entry.mesh); entry.mesh.geometry.dispose(); entry.mesh = null; }
+      entry.bodies.forEach(b => physicsWorld && physicsWorld.removeBody(b));
+      entry.bodies = [];
+
+      if (entry.blocks.length === 0) return;
+
+      // 色ごとに頂点配列を構築 (face culling 付き)
+      const colorGroups = new Map(); // color → { positions[], normals[], indices[], vtxCount }
+      for (const blk of entry.blocks) {
+        const { x, y, z, color } = blk;
+        if (!colorGroups.has(color)) colorGroups.set(color, { pos: [], nor: [], idx: [], vtx: 0 });
+        const g = colorGroups.get(color);
+        for (let f = 0; f < 6; f++) {
+          const d = WB_FACES[f].dir;
+          const nx = x + d[0], ny = y + d[1], nz = z + d[2];
+          if (worldBlockMap.has(_wKey(nx, ny, nz))) continue; // 隣接ブロックがあれば面不要
+          const verts = WB_FACE_VERTS[f];
+          const n = WB_FACES[f].norm;
+          const base = g.vtx;
+          for (const v of verts) {
+            g.pos.push(x + v[0] - 0.5, y + v[1], z + v[2] - 0.5);
+            g.nor.push(n[0], n[1], n[2]);
+          }
+          g.idx.push(base, base+1, base+2, base, base+2, base+3);
+          g.vtx += 4;
+        }
+      }
+
+      if (colorGroups.size === 0) return;
+
+      // 全色をひとつの BufferGeometry に統合 (マルチマテリアル)
+      const allPos = [], allNor = [], allIdx = [];
+      const materials = [];
+      let vtxOffset = 0, idxOffset = 0;
+      const geo = new THREE.BufferGeometry();
+      for (const [color, g] of colorGroups) {
+        if (g.idx.length === 0) continue;
+        const idxStart = allIdx.length;
+        for (const i of g.idx) allIdx.push(i + vtxOffset);
+        for (const v of g.pos) allPos.push(v);
+        for (const n of g.nor) allNor.push(n);
+        geo.addGroup(idxStart, g.idx.length, materials.length);
+        materials.push(new THREE.MeshLambertMaterial({ color }));
+        vtxOffset += g.vtx;
+      }
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(allPos, 3));
+      geo.setAttribute('normal',   new THREE.Float32BufferAttribute(allNor, 3));
+      geo.setIndex(allIdx);
+
+      const mesh = new THREE.Mesh(geo, materials);
+      mesh.receiveShadow = true;
+      mesh.castShadow    = false;
+      mesh.userData.isWorldBlock = true;
+      scene.add(mesh);
+      entry.mesh = mesh;
+
+      // Physics: 1ブロック = 1 static box body
+      if (physicsWorld) {
+        for (const blk of entry.blocks) {
+          const b = new CANNON.Body({ mass: 0 });
+          b.addShape(new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5)));
+          b.position.set(blk.x, blk.y + 0.5, blk.z);
+          physicsWorld.addBody(b);
+          entry.bodies.push(b);
+        }
+      }
+    }
+
+    function _markChunkDirty(wx, wy, wz) {
+      const key = _cKey(_worldToChunk(wx), _worldToChunk(wy), _worldToChunk(wz));
+      _wbDirtyChunks.add(key);
+    }
+
+    function rebuildDirtyChunks() {
+      if (_wbDirtyChunks.size === 0) return;
+      for (const key of _wbDirtyChunks) {
+        if (!worldChunkMap.has(key)) worldChunkMap.set(key, { blocks: [], mesh: null, bodies: [] });
+        _rebuildChunk(key);
+      }
+      _wbDirtyChunks.clear();
+    }
+
+    function placeWorldBlock(wx, wy, wz, color) {
+      const k = _wKey(wx, wy, wz);
+      if (worldBlockMap.has(k)) return; // 既にある
+      worldBlockMap.set(k, color);
+      const cKey = _cKey(_worldToChunk(wx), _worldToChunk(wy), _worldToChunk(wz));
+      if (!worldChunkMap.has(cKey)) worldChunkMap.set(cKey, { blocks: [], mesh: null, bodies: [] });
+      worldChunkMap.get(cKey).blocks.push({ x: wx, y: wy, z: wz, color });
+      _wbDirtyChunks.add(cKey);
+      // 隣接チャンクも face culling が変わるので dirty に
+      [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]].forEach(([dx,dy,dz]) => {
+        _wbDirtyChunks.add(_cKey(_worldToChunk(wx+dx), _worldToChunk(wy+dy), _worldToChunk(wz+dz)));
+      });
+    }
+
+    function removeWorldBlock(wx, wy, wz) {
+      const k = _wKey(wx, wy, wz);
+      if (!worldBlockMap.has(k)) return;
+      worldBlockMap.delete(k);
+      const cKey = _cKey(_worldToChunk(wx), _worldToChunk(wy), _worldToChunk(wz));
+      const entry = worldChunkMap.get(cKey);
+      if (entry) {
+        entry.blocks = entry.blocks.filter(b => !(b.x === wx && b.y === wy && b.z === wz));
+        _wbDirtyChunks.add(cKey);
+        [[-1,0,0],[1,0,0],[0,-1,0],[0,1,0],[0,0,-1],[0,0,1]].forEach(([dx,dy,dz]) => {
+          _wbDirtyChunks.add(_cKey(_worldToChunk(wx+dx), _worldToChunk(wy+dy), _worldToChunk(wz+dz)));
+        });
+      }
+    }
+
+    // ===== ワールドブロック: レイキャスト & プレビュー =====
+    function _getWBTarget() {
+      // 画面中心からレイを飛ばして地形 or ワールドブロックにヒット
+      wbRaycaster.setFromCamera({ x: 0, y: 0 }, camera);
+      // ワールドブロックメッシュを収集
+      const wbMeshes = [];
+      worldChunkMap.forEach(entry => { if (entry.mesh) wbMeshes.push(entry.mesh); });
+      // 地形メッシュ
+      const targets = [survivalField, ...wbMeshes];
+      const hits = wbRaycaster.intersectObjects(targets, false);
+      if (hits.length === 0) return null;
+      const hit = hits[0];
+      if (hit.distance > 12) return null; // 12m より遠は無視
+      return hit;
+    }
+
+    function _updateWBPreview() {
+      if (!worldBuildMode || wbDeleteMode) {
+        if (wbPreviewMesh) wbPreviewMesh.visible = false;
+        return;
+      }
+      const hit = _getWBTarget();
+      if (!hit) { if (wbPreviewMesh) wbPreviewMesh.visible = false; return; }
+
+      // ノーマル方向にオフセットして配置位置を計算
+      const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+      const px = Math.round(hit.point.x + n.x * 0.5);
+      const py = Math.floor(hit.point.y + n.y * 0.5);
+      const pz = Math.round(hit.point.z + n.z * 0.5);
+
+      if (!wbPreviewMesh) {
+        wbPreviewMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(WB_BLOCK, WB_BLOCK, WB_BLOCK),
+          new THREE.MeshLambertMaterial({ color: wbCurrentColor, transparent: true, opacity: 0.45 })
+        );
+        scene.add(wbPreviewMesh);
+      }
+      wbPreviewMesh.material.color.setHex(wbCurrentColor);
+      wbPreviewMesh.position.set(px, py + 0.5, pz);
+      wbPreviewMesh.visible = true;
+    }
+
+    function _wbTapPlace() {
+      const hit = _getWBTarget();
+      if (!hit) return;
+      if (wbDeleteMode) {
+        if (hit.object.userData.isWorldBlock) {
+          const p = hit.point.clone().sub(
+            hit.face.normal.clone().transformDirection(hit.object.matrixWorld).multiplyScalar(0.5)
+          );
+          removeWorldBlock(Math.round(p.x), Math.floor(p.y), Math.round(p.z));
+          saveWorldBlocks();
+        }
+      } else {
+        const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+        const px = Math.round(hit.point.x + n.x * 0.5);
+        const py = Math.floor(hit.point.y + n.y * 0.5);
+        const pz = Math.round(hit.point.z + n.z * 0.5);
+        placeWorldBlock(px, py, pz, wbCurrentColor);
+        saveWorldBlocks();
+      }
+    }
+
+    // ===== ワールドビルドモード: 入退出 =====
+    function enterWorldBuildMode() {
+      worldBuildMode = true;
+      document.getElementById('wb-crosshair').style.display  = 'block';
+      document.getElementById('wb-panel').style.display      = 'flex';
+      document.getElementById('wb-build-toggle-btn').classList.add('active');
+      document.getElementById('wb-build-toggle-btn').textContent = '🚗 走行';
+    }
+
+    function exitWorldBuildMode() {
+      worldBuildMode = false;
+      if (wbPreviewMesh) wbPreviewMesh.visible = false;
+      document.getElementById('wb-crosshair').style.display  = 'none';
+      document.getElementById('wb-panel').style.display      = 'none';
+      document.getElementById('wb-build-toggle-btn').classList.remove('active');
+      document.getElementById('wb-build-toggle-btn').textContent = '🧱 建設';
+    }
+
+    function toggleWorldBuildMode() {
+      if (worldBuildMode) exitWorldBuildMode(); else enterWorldBuildMode();
+    }
+
+    function toggleWBDelete() {
+      wbDeleteMode = !wbDeleteMode;
+      const btn = document.getElementById('wb-delete-btn');
+      btn.classList.toggle('active', wbDeleteMode);
+      if (wbPreviewMesh) wbPreviewMesh.visible = false;
+    }
+
+    // ===== ワールドブロック: セーブ/ロード =====
+    function saveWorldBlocks() {
+      const arr = [];
+      worldBlockMap.forEach((color, key) => {
+        const [x, y, z] = key.split('|').map(Number);
+        arr.push({ x, y, z, color });
+      });
+      try { localStorage.setItem('block_craft_world', JSON.stringify(arr)); } catch(e) {}
+    }
+
+    function loadWorldBlocks() {
+      try {
+        const raw = localStorage.getItem('block_craft_world');
+        if (!raw) return;
+        const arr = JSON.parse(raw);
+        arr.forEach(({ x, y, z, color }) => placeWorldBlock(x, y, z, color));
+      } catch(e) {}
+    }
+
+    function showWorldChunks(visible) {
+      worldChunkMap.forEach(entry => { if (entry.mesh) entry.mesh.visible = visible; });
+    }
+
+    // ===== WB パレット初期化 =====
+    function _initWBPalette() {
+      const container = document.getElementById('wb-swatches');
+      container.innerHTML = '';
+      WB_PALETTE.forEach((color, i) => {
+        const sw = document.createElement('div');
+        sw.className = 'wb-swatch' + (i === 0 ? ' active' : '');
+        sw.style.background = '#' + color.toString(16).padStart(6, '0');
+        sw.addEventListener('pointerdown', (e) => {
+          e.stopPropagation();
+          wbCurrentColor = color;
+          wbDeleteMode   = false;
+          document.getElementById('wb-delete-btn').classList.remove('active');
+          container.querySelectorAll('.wb-swatch').forEach(s => s.classList.remove('active'));
+          sw.classList.add('active');
+          if (wbPreviewMesh) wbPreviewMesh.material.color.setHex(color);
+        });
+        container.appendChild(sw);
+      });
+    }
+    _initWBPalette();
+
     // サバイバル物理ループ
     function updateSurvival(now) {
       const dt = Math.min((now - lastSurvivalTime) * 0.001, 0.05);
       lastSurvivalTime = now;
       if (dt <= 0) return;
+
+      // WB モード中: 車両入力をゼロにして物理は維持
+      if (worldBuildMode) {
+        _updateWBPreview();
+        updateVehicleTransform();
+        updateSurvivalCamera();
+        updateBiomeAtmosphere(vehicleState.pos.x, vehicleState.pos.z);
+        return;
+      }
 
       const gasInput   = -joyVec.y + (survivalKeys.w ? 1 : 0) - (survivalKeys.s ? 1 : 0);
       const steerInput =  joyVec.x + (survivalKeys.d ? 1 : 0) - (survivalKeys.a ? 1 : 0);
@@ -4155,6 +4596,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         updateFPS(now);
       } else if (gameMode === 'survival') {
         updateSurvival(now);
+        rebuildDirtyChunks();
       }
 
       renderer.render(scene, camera);
