@@ -3882,11 +3882,15 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // ===== ワールドビルドモード: 入退出 =====
     function enterWorldBuildMode() {
       worldBuildMode = true;
-      // 車両位置からカメラを初期化（FPS視点で立ち上がる）
-      const vp = vehicleState.pos;
-      const groundY = getTerrainHeight(vp.x, vp.z);
-      wbCam.pos.set(vp.x, groundY + PLAYER_EYE + 0.5, vp.z);
-      wbCam.yaw   = vehicleState.yaw + Math.PI; // 車両前方を正面に
+      // 車両後方 6m の位置からカメラを初期化（車体内部への埋まり防止）
+      const vp   = vehicleState.pos;
+      const fwdX = Math.sin(vehicleState.yaw);
+      const fwdZ = Math.cos(vehicleState.yaw);
+      const spawnX = vp.x - fwdX * 6;
+      const spawnZ = vp.z - fwdZ * 6;
+      const spawnGround = getTerrainHeight(spawnX, spawnZ);
+      wbCam.pos.set(spawnX, spawnGround + PLAYER_EYE + 1, spawnZ);
+      wbCam.yaw   = vehicleState.yaw; // 車両の方向を向く
       wbCam.pitch = -0.15;
       wbCam.velY  = 0;
       isFlyingUp = false; isFlyingDown = false;
