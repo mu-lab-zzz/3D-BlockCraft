@@ -2362,8 +2362,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         player.pitch += dy * 0.003;
         player.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
       } else {
-        // サバイバル WB モードではカメラ回転しない
-        if (worldBuildMode) return;
         // ピンチ中はカメラ回転をスキップ
         if (!survivalPinching) {
           survivalCamTheta -= dx * 0.005;
@@ -2376,7 +2374,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         // WB モード: タップ判定（小さな移動 = タップ）
         if (gameMode === 'survival' && worldBuildMode) {
           const moved = Math.hypot(e.clientX - wbTapStartX, e.clientY - wbTapStartY);
-          if (moved < 8) _wbTapPlace();
+          if (moved < 12) _wbTapPlace();
         }
         fpsLookTouchId = null;
       }
@@ -3823,7 +3821,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const hits = wbRaycaster.intersectObjects(targets, false);
       if (hits.length === 0) return null;
       const hit = hits[0];
-      if (hit.distance > 12) return null; // 12m より遠は無視
+      if (hit.distance > 60) return null; // 60m より遠は無視
       return hit;
     }
 
