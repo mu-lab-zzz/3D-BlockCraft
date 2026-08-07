@@ -948,7 +948,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06o · workshop</span>
+      <span class="footer-version">build 2026-08-06p · workshop</span>
     </div>
   </div>
 
@@ -1289,9 +1289,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     renderer.shadowMap.enabled = true;
     container.appendChild(renderer.domElement);
 
-    // ライティング
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    // ライティング（HemisphereLight で地形の陰影を自然に）
+    const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x4a3a1e, 0.55);
+    scene.add(hemiLight);
+    const dirLight = new THREE.DirectionalLight(0xfff5e0, 0.85);
     dirLight.position.set(25, 40, 25);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.set(2048, 2048);
@@ -1318,17 +1319,30 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     {
       const tPos = terrainGeo.attributes.position;
       const tCol = [];
+      const eps = 0.8;
       for (let i = 0; i < tPos.count; i++) {
         const tx = tPos.getX(i), tz = tPos.getZ(i);
         const ty = getTerrainHeight(tx, tz);
         tPos.setY(i, ty);
-        let r, g, b;
-        if      (ty < -1.5) { r=0.18; g=0.13; b=0.08; }
-        else if (ty <  0.5) { r=0.09; g=0.19; b=0.06; }
-        else if (ty <  2.5) { r=0.13; g=0.25; b=0.08; }
-        else if (ty <  4.5) { r=0.26; g=0.24; b=0.15; }
-        else                { r=0.35; g=0.30; b=0.22; }
-        tCol.push(r, g, b);
+        // 傾斜を高さ関数の微分から計算（法線不要）
+        const dHdx = (getTerrainHeight(tx + eps, tz) - getTerrainHeight(tx - eps, tz)) / (2 * eps);
+        const dHdz = (getTerrainHeight(tx, tz + eps) - getTerrainHeight(tx, tz - eps)) / (2 * eps);
+        const slope = Math.min(1, Math.sqrt(dHdx * dHdx + dHdz * dHdz) / 1.5);
+        // バイオーム重みでカラーをブレンド
+        const bw = _biomeWeights(tx, tz);
+        let cr = 0, cg = 0, cb = 0;
+        for (const [biome, weight] of Object.entries(bw)) {
+          if (weight < 0.001) continue;
+          const [br, bg, bb] = _biomeVertexColor(biome, ty, slope);
+          cr += br * weight; cg += bg * weight; cb += bb * weight;
+        }
+        // 微細ノイズで単調さを消す
+        const nc = Math.sin(tx * 0.31 + 1.1) * Math.cos(tz * 0.27 + 2.3) * 0.04;
+        tCol.push(
+          Math.max(0, Math.min(1, cr + nc)),
+          Math.max(0, Math.min(1, cg + nc * 0.6)),
+          Math.max(0, Math.min(1, cb + nc * 0.3))
+        );
       }
       terrainGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(tCol), 3));
       tPos.needsUpdate = true;
@@ -2913,7 +2927,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
       // ワールド切替
       survivalField.visible = true;
-      scene.background      = new THREE.Color(0x0a1628);
+      scene.background      = new THREE.Color(0x6ab0e0);
+      scene.fog             = new THREE.Fog(0x8ec8e8, 90, 380);
       dirLight.intensity    = 1.0;
 
       initPhysicsWorld();
@@ -2962,6 +2977,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       gridHelper.visible    = !survivalWorkshop;
       plane.visible         = !survivalWorkshop;
       scene.background      = new THREE.Color(0x1a1a24);
+      scene.fog             = null;
       dirLight.intensity    = 0.8;
 
       // 建築 UI を復元
@@ -3077,16 +3093,158 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       camera.lookAt(sx, sy + 1.2, sz);
     }
 
-    // 地形高さ関数（sin波の重ね合わせ、中心20単位は平坦）
+    // シード付き疑似乱数（地形オブジェクトを毎回同じ位置に配置するため）
+    function mulberry32(seed) {
+      return function () {
+        seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+        let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    // バイオーム重みを返す（6バイオーム：合計1）
+    function _biomeWeights(x, z) {
+      const dist = Math.sqrt(x * x + z * z);
+      const core = Math.max(0, 1 - dist / 65);
+      if (core >= 0.999) return { grassland: 1, forest: 0, desert: 0, canyon: 0, mountain: 0, tundra: 0 };
+      // 境界をゆらがせる低周波ノイズ
+      const bn = Math.sin(x * 0.017 + 1.3) * Math.cos(z * 0.021 + 0.7) * 0.12
+               + Math.cos(x * 0.031 + 2.9) * Math.sin(z * 0.028 + 1.4) * 0.06;
+      const a = ((Math.atan2(z, x) / (Math.PI * 2) + 0.5 + bn) % 1 + 1) % 1;
+      // 5つの外周バイオームをcosブレンドで重複させる
+      const outerNames = ['desert', 'canyon', 'mountain', 'tundra', 'forest'];
+      const n = outerNames.length;
+      const raw = outerNames.map((_, i) => {
+        const center = i / n;
+        const d = Math.min(Math.abs(a - center), 1 - Math.abs(a - center));
+        return Math.max(0, 1 - d * n * 1.35);
+      });
+      const rawSum = raw.reduce((s, v) => s + v, 0) || 1;
+      const fade = 1 - core;
+      const w = { grassland: core };
+      outerNames.forEach((name, i) => { w[name] = (raw[i] / rawSum) * fade; });
+      return w;
+    }
+
+    // バイオーム + 高さ + 傾斜 → 頂点カラー [r, g, b]
+    function _biomeVertexColor(biome, ty, slope) {
+      let r, g, b;
+      switch (biome) {
+        case 'grassland':
+          if      (ty < -1.5) { r=0.16; g=0.11; b=0.06; }
+          else if (ty <  0.5) { r=0.08; g=0.18; b=0.05; }
+          else if (ty <  2.5) { r=0.10; g=0.26; b=0.07; }
+          else if (ty <  4.5) { r=0.18; g=0.30; b=0.10; }
+          else                { r=0.26; g=0.33; b=0.14; }
+          break;
+        case 'forest':
+          if      (ty < -1.0) { r=0.09; g=0.08; b=0.04; }
+          else if (ty <  1.5) { r=0.06; g=0.13; b=0.04; }
+          else if (ty <  4.0) { r=0.05; g=0.20; b=0.04; }
+          else if (ty <  7.0) { r=0.07; g=0.23; b=0.05; }
+          else                { r=0.13; g=0.24; b=0.08; }
+          break;
+        case 'desert':
+          if      (ty < -1.0) { r=0.28; g=0.20; b=0.10; }
+          else if (ty <  2.0) { r=0.52; g=0.39; b=0.19; }
+          else if (ty <  4.0) { r=0.64; g=0.50; b=0.27; }
+          else if (ty <  6.0) { r=0.72; g=0.57; b=0.33; }
+          else                { r=0.78; g=0.63; b=0.40; }
+          break;
+        case 'canyon':
+          if      (ty < -2.5) { r=0.11; g=0.06; b=0.03; }
+          else if (ty < -0.5) { r=0.30; g=0.13; b=0.06; }
+          else if (ty <  2.5) { r=0.48; g=0.22; b=0.09; }
+          else if (ty <  5.5) { r=0.56; g=0.27; b=0.10; }
+          else                { r=0.52; g=0.23; b=0.08; }
+          break;
+        case 'mountain':
+          if      (ty <  0.5) { r=0.24; g=0.22; b=0.19; }
+          else if (ty <  4.0) { r=0.38; g=0.35; b=0.31; }
+          else if (ty <  8.0) { r=0.50; g=0.47; b=0.43; }
+          else if (ty < 12.0) { r=0.75; g=0.78; b=0.84; }
+          else                { r=0.92; g=0.94; b=0.98; }
+          break;
+        case 'tundra':
+          if      (ty < -0.3) { r=0.32; g=0.40; b=0.48; }
+          else if (ty <  0.5) { r=0.62; g=0.72; b=0.80; }
+          else if (ty <  1.0) { r=0.80; g=0.87; b=0.93; }
+          else                { r=0.92; g=0.95; b=0.99; }
+          break;
+        default: r=0.09; g=0.19; b=0.06;
+      }
+      // 急傾斜 → 岩肌色を重ねる
+      if (slope > 0.25) {
+        const mix = Math.min(1, (slope - 0.25) / 0.55);
+        const rr = biome === 'canyon' ? 0.40 : biome === 'desert' ? 0.48 : biome === 'tundra' ? 0.42 : biome === 'mountain' ? 0.34 : 0.32;
+        const gr = biome === 'canyon' ? 0.18 : biome === 'desert' ? 0.33 : biome === 'tundra' ? 0.48 : biome === 'mountain' ? 0.32 : 0.28;
+        const br = biome === 'canyon' ? 0.07 : biome === 'desert' ? 0.15 : biome === 'tundra' ? 0.54 : biome === 'mountain' ? 0.29 : 0.21;
+        r += (rr - r) * mix; g += (gr - g) * mix; b += (br - b) * mix;
+      }
+      return [r, g, b];
+    }
+
+    // バイオームごとの大気色テーブル
+    const BIOME_ATM = {
+      grassland: { fogR: 0.557, fogG: 0.784, fogB: 0.910, skyR: 0.416, skyG: 0.690, skyB: 0.878, near: 90,  far: 380 },
+      forest:    { fogR: 0.290, fogG: 0.431, fogB: 0.353, skyR: 0.172, skyG: 0.306, skyB: 0.227, near: 65,  far: 290 },
+      desert:    { fogR: 0.910, fogG: 0.788, fogB: 0.439, skyR: 0.831, skyG: 0.627, skyB: 0.188, near: 110, far: 420 },
+      canyon:    { fogR: 0.753, fogG: 0.408, fogB: 0.251, skyR: 0.541, skyG: 0.220, skyB: 0.094, near: 75,  far: 330 },
+      mountain:  { fogR: 0.588, fogG: 0.698, fogB: 0.800, skyR: 0.290, skyG: 0.478, skyB: 0.667, near: 65,  far: 310 },
+      tundra:    { fogR: 0.816, fogG: 0.910, fogB: 0.957, skyR: 0.533, skyG: 0.706, skyB: 0.831, near: 85,  far: 360 },
+    };
+
+    // バイオーム大気をリアルタイムに補間更新（サバイバル走行中に毎フレーム呼ぶ）
+    function updateBiomeAtmosphere(x, z) {
+      if (!scene.fog) return;
+      const bw = _biomeWeights(x, z);
+      let fr = 0, fg = 0, fb = 0, sr = 0, sg = 0, sb = 0, ner = 0, far2 = 0;
+      for (const [biome, weight] of Object.entries(bw)) {
+        if (weight < 0.001) continue;
+        const atm = BIOME_ATM[biome];
+        fr += atm.fogR * weight; fg += atm.fogG * weight; fb += atm.fogB * weight;
+        sr += atm.skyR * weight; sg += atm.skyG * weight; sb += atm.skyB * weight;
+        ner += atm.near * weight; far2 += atm.far * weight;
+      }
+      const k = 0.02;
+      scene.fog.color.r  += (fr - scene.fog.color.r)  * k;
+      scene.fog.color.g  += (fg - scene.fog.color.g)  * k;
+      scene.fog.color.b  += (fb - scene.fog.color.b)  * k;
+      scene.fog.near     += (ner  - scene.fog.near)   * k;
+      scene.fog.far      += (far2 - scene.fog.far)    * k;
+      scene.background.r += (sr - scene.background.r) * k;
+      scene.background.g += (sg - scene.background.g) * k;
+      scene.background.b += (sb - scene.background.b) * k;
+    }
+
+    // 地形高さ関数（バイオーム別プロファイルをブレンド、中心20単位は平坦）
     function getTerrainHeight(x, z) {
       const dist  = Math.sqrt(x * x + z * z);
-      const blend = Math.max(0, Math.min(1, (dist - 20) / 15));
-      const h =
-        Math.sin(x * 0.08)        * Math.cos(z * 0.07)        * 4.5 +
-        Math.sin(x * 0.04 + 1.3)  * Math.sin(z * 0.05 + 0.8)  * 3.0 +
-        Math.cos(x * 0.13 + 2.5)  * Math.cos(z * 0.11 + 1.7)  * 1.8 +
-        Math.sin(x * 0.22 + 0.4)  * Math.cos(z * 0.19 + 2.1)  * 0.9;
-      return h * blend;
+      const coreFade = Math.max(0, Math.min(1, (dist - 20) / 15));
+      // 基本波形
+      const base =
+        Math.sin(x * 0.08)       * Math.cos(z * 0.07)       * 4.5 +
+        Math.sin(x * 0.04 + 1.3) * Math.sin(z * 0.05 + 0.8) * 3.0 +
+        Math.cos(x * 0.13 + 2.5) * Math.cos(z * 0.11 + 1.7) * 1.8 +
+        Math.sin(x * 0.22 + 0.4) * Math.cos(z * 0.19 + 2.1) * 0.9;
+      // バイオーム別高さプロファイル
+      const w = _biomeWeights(x, z);
+      const hGrass    = base * 0.55;
+      const hForest   = base * 0.85 + Math.sin(x * 0.06 + 1.1) * Math.cos(z * 0.07) * 2.0;
+      const hDesert   = Math.sin(x * 0.028 + 0.5) * Math.cos(z * 0.022 + 1.2) * 5.5
+                      + Math.sin(x * 0.055 + 2.1) * Math.cos(z * 0.048 + 0.6) * 1.8;
+      const ridge     = Math.sin(x * 0.045 + 1.0) * Math.cos(z * 0.038 + 0.3);
+      const hCanyon   = ridge * 7.0
+                      - Math.max(0, Math.sin(x * 0.11 + 2.5)) * Math.abs(Math.cos(z * 0.09)) * 5.0
+                      + Math.sin(z * 0.055 + 1.7) * 2.5;
+      const hMountain = base * 1.6
+                      + Math.abs(Math.sin(x * 0.048 + 2.0) * Math.cos(z * 0.042 + 1.5)) * 9.0
+                      + Math.sin(x * 0.095) * Math.cos(z * 0.085) * 2.5;
+      const hTundra   = base * 0.2 + Math.sin(x * 0.12) * Math.cos(z * 0.10) * 1.0;
+      const h = w.grassland * hGrass + w.forest * hForest + w.desert * hDesert
+              + w.canyon * hCanyon + w.mountain * hMountain + w.tundra * hTundra;
+      return h * coreFade;
     }
 
     // 物理ワールドをサバイバル初回時に遅延生成（CDN 失敗時は null のまま）
@@ -3239,79 +3397,120 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     // 岩・木などの地形オブジェクトを生成（初回サバイバル突入時に一度だけ実行）
     function buildTerrainObjects() {
-      const matRock1  = new THREE.MeshStandardMaterial({ color: 0x7a6f60, roughness: 0.92, metalness: 0.05 });
-      const matRock2  = new THREE.MeshStandardMaterial({ color: 0x4e4840, roughness: 0.97 });
-      const matTrunk  = new THREE.MeshStandardMaterial({ color: 0x5a3a18, roughness: 1.0 });
-      const matLeaves = new THREE.MeshStandardMaterial({ color: 0x1c4010, roughness: 0.95 });
+      const dummy = new THREE.Object3D();
 
-      // 岩
-      for (let i = 0; i < 130; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const dist  = 25 + Math.random() * 210;
+      // InstancedMesh 岩 (バイオーム別マテリアル、1種類あたり1ドローコール)
+      const geoRock = new THREE.DodecahedronGeometry(1, 0);
+      const matRockG = new THREE.MeshStandardMaterial({ color: 0x7a6f60, roughness: 0.92, metalness: 0.05 });
+      const matRockD = new THREE.MeshStandardMaterial({ color: 0xa08050, roughness: 0.90, metalness: 0.02 });
+      const matRockC = new THREE.MeshStandardMaterial({ color: 0x8a3020, roughness: 0.94, metalness: 0.03 });
+      const matRockM = new THREE.MeshStandardMaterial({ color: 0xb0a898, roughness: 0.85, metalness: 0.10 });
+      const matRockT = new THREE.MeshStandardMaterial({ color: 0x8eaabf, roughness: 0.70, metalness: 0.15 });
+      const RMAX = 80;
+      const iRockG = new THREE.InstancedMesh(geoRock, matRockG, RMAX);
+      const iRockD = new THREE.InstancedMesh(geoRock, matRockD, RMAX);
+      const iRockC = new THREE.InstancedMesh(geoRock, matRockC, RMAX);
+      const iRockM = new THREE.InstancedMesh(geoRock, matRockM, RMAX);
+      const iRockT = new THREE.InstancedMesh(geoRock, matRockT, RMAX);
+      const rockMeshes = [iRockG, iRockD, iRockC, iRockM, iRockT];
+      rockMeshes.forEach(im => {
+        im.castShadow = im.receiveShadow = true;
+        im.visible = false; im.count = 0;
+        scene.add(im); terrainObjects.push(im);
+      });
+
+      const rng1 = mulberry32(42);
+      for (let i = 0; i < 380; i++) {
+        const angle = rng1() * Math.PI * 2;
+        const dist  = 25 + rng1() * 255;
         const x = Math.cos(angle) * dist, z = Math.sin(angle) * dist;
         const y = getTerrainHeight(x, z);
-        const s = 0.4 + Math.random() * 2.8;
-        const rock = new THREE.Mesh(
-          new THREE.DodecahedronGeometry(s, 0),
-          Math.random() > 0.4 ? matRock1 : matRock2
-        );
-        const cy = y + s * 0.55;
-        rock.position.set(x, cy, z);
-        rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-        const sx = 1 + Math.random() * 0.6, sy = 0.5 + Math.random() * 0.7, sz = 1 + Math.random() * 0.6;
-        rock.scale.set(sx, sy, sz);
-        rock.castShadow = true;
-        rock.receiveShadow = true;
-        rock.visible = false;
-        scene.add(rock);
-        terrainObjects.push(rock);
+        const bw = _biomeWeights(x, z);
+        const dom = Object.entries(bw).sort((a, b) => b[1] - a[1])[0][0];
+        const s = 0.4 + rng1() * 2.6;
+        const sx = 1 + rng1() * 0.6, sy = 0.45 + rng1() * 0.75, sz = 1 + rng1() * 0.6;
+        const im = dom === 'desert' ? iRockD : dom === 'canyon' ? iRockC : dom === 'mountain' ? iRockM : dom === 'tundra' ? iRockT : iRockG;
+        if (im.count >= RMAX) continue;
+        dummy.position.set(x, y + s * sy * 0.55, z);
+        dummy.rotation.set(rng1() * Math.PI, rng1() * Math.PI, rng1() * Math.PI);
+        dummy.scale.set(sx * s, sy * s, sz * s);
+        dummy.updateMatrix();
+        im.setMatrixAt(im.count++, dummy.matrix);
         if (physicsWorld) {
           const rb = new CANNON.Body({ mass: 0 });
           rb.addShape(new CANNON.Box(new CANNON.Vec3(s * sx * 0.7, s * sy * 0.5, s * sz * 0.7)));
-          rb.position.set(x, cy, z);
+          rb.position.set(x, y + s * sy * 0.55, z);
           physicsWorld.addBody(rb);
         }
       }
+      rockMeshes.forEach(im => { im.instanceMatrix.needsUpdate = true; });
 
-      // 木
-      for (let i = 0; i < 90; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const dist  = 30 + Math.random() * 190;
+      // InstancedMesh サボテン（砂漠バイオーム）
+      const geoCactus = new THREE.CylinderGeometry(0.3, 0.45, 1.0, 6);
+      const matCactus = new THREE.MeshStandardMaterial({ color: 0x2f6b3a, roughness: 0.85 });
+      const CMAX = 60;
+      const iCactus = new THREE.InstancedMesh(geoCactus, matCactus, CMAX);
+      iCactus.castShadow = true; iCactus.visible = false; iCactus.count = 0;
+      scene.add(iCactus); terrainObjects.push(iCactus);
+      const rng2 = mulberry32(71);
+      for (let i = 0; i < 200 && iCactus.count < CMAX; i++) {
+        const angle = rng2() * Math.PI * 2;
+        const dist  = 65 + rng2() * 230;
         const x = Math.cos(angle) * dist, z = Math.sin(angle) * dist;
+        if (_biomeWeights(x, z).desert < 0.3) continue;
         const y = getTerrainHeight(x, z);
-        const trunkH = 1.6 + Math.random() * 2.2;
+        const h = 2.0 + rng2() * 2.8;
+        dummy.position.set(x, y + h * 0.5, z);
+        dummy.rotation.set(0, rng2() * Math.PI * 2, 0);
+        dummy.scale.set(0.7 + rng2() * 0.5, h, 0.7 + rng2() * 0.5);
+        dummy.updateMatrix();
+        iCactus.setMatrixAt(iCactus.count++, dummy.matrix);
+      }
+      iCactus.instanceMatrix.needsUpdate = true;
+
+      // 木（バイオーム別：森=深緑、草原=緑、雪原=枯れ木、砂漠・峡谷・山は省略）
+      const matTrunk   = new THREE.MeshStandardMaterial({ color: 0x5a3a18, roughness: 1.0 });
+      const matTrunkW  = new THREE.MeshStandardMaterial({ color: 0xc0c4cc, roughness: 1.0 });
+      const matLeaves  = new THREE.MeshStandardMaterial({ color: 0x1c4010, roughness: 0.95 });
+      const matLeavesF = new THREE.MeshStandardMaterial({ color: 0x0d3008, roughness: 0.95 });
+      const rng3 = mulberry32(137);
+      for (let i = 0; i < 240; i++) {
+        const angle = rng3() * Math.PI * 2;
+        const dist  = 30 + rng3() * 240;
+        const x = Math.cos(angle) * dist, z = Math.sin(angle) * dist;
+        const bw = _biomeWeights(x, z);
+        const dom = Object.entries(bw).sort((a, b) => b[1] - a[1])[0][0];
+        if (dom === 'desert' || dom === 'canyon' || dom === 'mountain') continue;
+        const y = getTerrainHeight(x, z);
+        const isForest = dom === 'forest';
+        const isTundra = dom === 'tundra';
         const g = new THREE.Group();
+        const trunkH = 1.4 + rng3() * 2.0 + (isForest ? 1.0 : 0);
         const trunk = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.14, 0.26, trunkH, 5),
-          matTrunk
+          new THREE.CylinderGeometry(0.12, 0.24, trunkH, 5),
+          isTundra ? matTrunkW : matTrunk
         );
-        trunk.position.y = trunkH * 0.5;
-        trunk.castShadow = true;
+        trunk.position.y = trunkH * 0.5; trunk.castShadow = true;
         g.add(trunk);
-        const crH = 2.0 + Math.random() * 2.5;
-        const crown = new THREE.Mesh(
-          new THREE.ConeGeometry(0.9 + Math.random() * 0.7, crH, 6),
-          matLeaves
-        );
-        crown.position.y = trunkH + crH * 0.38;
-        crown.castShadow = true;
-        g.add(crown);
-        if (Math.random() > 0.45) {
-          const crown2 = new THREE.Mesh(
-            new THREE.ConeGeometry(0.6 + Math.random() * 0.4, crH * 0.65, 6),
-            matLeaves
-          );
-          crown2.position.y = trunkH + crH * 0.80;
-          g.add(crown2);
+        if (!isTundra) {
+          const crH = 1.8 + rng3() * 2.0 + (isForest ? 1.2 : 0);
+          const crW = 0.8 + rng3() * 0.6 + (isForest ? 0.4 : 0);
+          const crown = new THREE.Mesh(new THREE.ConeGeometry(crW, crH, 6), isForest ? matLeavesF : matLeaves);
+          crown.position.y = trunkH + crH * 0.38; crown.castShadow = true;
+          g.add(crown);
+          if (rng3() > 0.4) {
+            const c2 = new THREE.Mesh(new THREE.ConeGeometry(crW * 0.65, crH * 0.6, 6), isForest ? matLeavesF : matLeaves);
+            c2.position.y = trunkH + crH * 0.80;
+            g.add(c2);
+          }
         }
-        g.position.set(x, y, z);
-        g.visible = false;
-        scene.add(g);
-        terrainObjects.push(g);
+        g.position.set(x, y, z); g.visible = false;
+        scene.add(g); terrainObjects.push(g);
         if (physicsWorld) {
+          const colH = isTundra ? trunkH : trunkH + 2.0;
           const tb = new CANNON.Body({ mass: 0 });
-          tb.addShape(new CANNON.Cylinder(0.22, 0.22, trunkH + crH * 0.7, 5));
-          tb.position.set(x, y + (trunkH + crH * 0.35) / 2, z);
+          tb.addShape(new CANNON.Cylinder(0.22, 0.22, colH, 5));
+          tb.position.set(x, y + colH * 0.5, z);
           physicsWorld.addBody(tb);
         }
       }
@@ -3397,6 +3596,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
       updateVehicleTransform();
       updateSurvivalCamera();
+      updateBiomeAtmosphere(vehicleState.pos.x, vehicleState.pos.z);
     }
 
     // ===== FPS: ジャンプ / 飛行 =====
