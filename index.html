@@ -1372,6 +1372,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let wbPreviewMesh    = null;
     let wbTapStartX      = 0, wbTapStartY = 0;
     const wbRaycaster    = new THREE.Raycaster();
+    // WB モード用独立カメラ（FPS視点で自由移動）
+    const wbCam = { pos: new THREE.Vector3(), yaw: 0, pitch: 0, velY: 0 };
 
     // ===== ワールドビルド補助 =====
     function _wKey(x, y, z) { return `${x}|${y}|${z}`; }
@@ -2361,8 +2363,13 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         player.yaw   -= dx * 0.003;
         player.pitch += dy * 0.003;
         player.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
+      } else if (worldBuildMode) {
+        // WB モード: wbCam の yaw/pitch を更新（FPS と同じ感度）
+        wbCam.yaw   -= dx * 0.003;
+        wbCam.pitch += dy * 0.003;
+        wbCam.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, wbCam.pitch));
       } else {
-        // ピンチ中はカメラ回転をスキップ
+        // 通常サバイバル: ピンチ中はカメラ回転をスキップ
         if (!survivalPinching) {
           survivalCamTheta -= dx * 0.005;
           survivalCamPhi = Math.max(0.15, Math.min(Math.PI * 0.62, survivalCamPhi + dy * 0.005));
@@ -3875,17 +3882,28 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // ===== ワールドビルドモード: 入退出 =====
     function enterWorldBuildMode() {
       worldBuildMode = true;
+      // 車両位置からカメラを初期化（FPS視点で立ち上がる）
+      const vp = vehicleState.pos;
+      const groundY = getTerrainHeight(vp.x, vp.z);
+      wbCam.pos.set(vp.x, groundY + PLAYER_EYE + 0.5, vp.z);
+      wbCam.yaw   = vehicleState.yaw + Math.PI; // 車両前方を正面に
+      wbCam.pitch = -0.15;
+      wbCam.velY  = 0;
+      isFlyingUp = false; isFlyingDown = false;
       document.getElementById('wb-crosshair').style.display  = 'block';
       document.getElementById('wb-panel').style.display      = 'flex';
+      document.getElementById('fly-down-btn').style.display  = 'flex';
       document.getElementById('wb-build-toggle-btn').classList.add('active');
       document.getElementById('wb-build-toggle-btn').textContent = '🚗 走行';
     }
 
     function exitWorldBuildMode() {
       worldBuildMode = false;
+      isFlyingUp = false; isFlyingDown = false;
       if (wbPreviewMesh) wbPreviewMesh.visible = false;
       document.getElementById('wb-crosshair').style.display  = 'none';
       document.getElementById('wb-panel').style.display      = 'none';
+      document.getElementById('fly-down-btn').style.display  = 'none';
       document.getElementById('wb-build-toggle-btn').classList.remove('active');
       document.getElementById('wb-build-toggle-btn').textContent = '🧱 建設';
     }
@@ -3952,12 +3970,37 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       lastSurvivalTime = now;
       if (dt <= 0) return;
 
-      // WB モード中: 車両入力をゼロにして物理は維持
+      // WB モード中: FPS 自由カメラで歩き回れる（車両は停止維持）
       if (worldBuildMode) {
+        // ジョイスティック / キーボードで水平移動（FPS と同じ計算式）
+        const wbSpeed = FLY_SPEED;
+        const fwd   = -joyVec.y + (survivalKeys.w ? 1 : 0) - (survivalKeys.s ? 1 : 0);
+        const right = -joyVec.x + (survivalKeys.d ? 1 : 0) - (survivalKeys.a ? 1 : 0);
+        const cos = Math.cos(wbCam.yaw), sin = Math.sin(wbCam.yaw);
+        wbCam.pos.x += (right * cos + fwd * sin) * wbSpeed * dt;
+        wbCam.pos.z += (-right * sin + fwd * cos) * wbSpeed * dt;
+        // Y 軸: フライボタンで上下（isFlyingUp/Down は FPS モード共有）
+        if (isFlyingUp)        wbCam.velY =  FLY_SPEED;
+        else if (isFlyingDown) wbCam.velY = -FLY_SPEED;
+        else                   wbCam.velY *= 0.75;
+        wbCam.pos.y += wbCam.velY * dt;
+        // 地形より下に潜らないよう制限
+        const minY = getTerrainHeight(wbCam.pos.x, wbCam.pos.z) + PLAYER_EYE;
+        wbCam.pos.y = Math.max(minY, wbCam.pos.y);
+        const B = 295;
+        wbCam.pos.x = Math.max(-B, Math.min(B, wbCam.pos.x));
+        wbCam.pos.z = Math.max(-B, Math.min(B, wbCam.pos.z));
+        // カメラを FPS 視点に切替（updateSurvivalCamera の上書き）
+        camera.position.copy(wbCam.pos);
+        const lookDir = new THREE.Vector3(
+          Math.sin(wbCam.yaw)  * Math.cos(wbCam.pitch),
+          -Math.sin(wbCam.pitch),
+          Math.cos(wbCam.yaw)  * Math.cos(wbCam.pitch)
+        );
+        camera.lookAt(wbCam.pos.clone().add(lookDir));
+        // プレビューと雰囲気
         _updateWBPreview();
-        updateVehicleTransform();
-        updateSurvivalCamera();
-        updateBiomeAtmosphere(vehicleState.pos.x, vehicleState.pos.z);
+        updateBiomeAtmosphere(wbCam.pos.x, wbCam.pos.z);
         return;
       }
 
@@ -4270,10 +4313,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     const jumpBtn     = document.getElementById('jump-btn');
     const flyDownBtn  = document.getElementById('fly-down-btn');
 
-    // ⬆ ボタン: 非飛行=ジャンプ1回 / 飛行=長押しで連続上昇
+    // ⬆ ボタン: WB モード=上昇 / 非飛行=ジャンプ1回 / 飛行=長押しで連続上昇
     jumpBtn.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      if (player.isFlying) {
+      if (gameMode === 'survival' && worldBuildMode) {
+        isFlyingUp = true;
+      } else if (player.isFlying) {
         isFlyingUp = true;
       } else if (player.onGround) {
         player.vel.y = JUMP_FORCE;
