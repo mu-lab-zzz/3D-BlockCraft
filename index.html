@@ -618,14 +618,13 @@
       display: none;
       position: absolute;
       bottom: calc(max(10px, env(safe-area-inset-bottom)) + 10px);
-      left: 15px;
+      right: 15px;
       background: rgba(10,15,30,0.82);
       backdrop-filter: blur(12px);
       border: 1px solid rgba(255,255,255,0.14);
       border-radius: 18px;
       padding: 12px 14px;
       z-index: 32;
-      display: none;
       flex-direction: column;
       gap: 10px;
       min-width: 220px;
@@ -1172,15 +1171,15 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   <div id="survival-hud">
     <button id="survival-exit-btn" onclick="exitSurvivalMode()">🏗 組立へ</button>
     <button id="wb-build-toggle-btn" onclick="toggleWorldBuildMode()">🧱 建設</button>
-    <div class="survival-badge">
+    <div class="survival-badge" id="badge-speed">
       <div class="survival-num" id="survival-speed">0</div>
       <div class="survival-badge-label">km/h</div>
     </div>
-    <div class="survival-badge">
+    <div class="survival-badge" id="badge-gear">
       <div class="survival-num" id="survival-gear" style="color:#22c55e">D</div>
       <div class="survival-badge-label">ギア</div>
     </div>
-    <div class="survival-badge">
+    <div class="survival-badge" id="badge-engine">
       <div class="survival-num" id="survival-engine" style="font-size:11px;color:#f87171">-</div>
       <div class="survival-badge-label">物理</div>
     </div>
@@ -3897,8 +3896,13 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       document.getElementById('wb-crosshair').style.display  = 'block';
       document.getElementById('wb-panel').style.display      = 'flex';
       document.getElementById('fly-down-btn').style.display  = 'flex';
+      document.getElementById('jump-btn').style.display      = 'flex';
       document.getElementById('wb-build-toggle-btn').classList.add('active');
       document.getElementById('wb-build-toggle-btn').textContent = '🚗 走行';
+      // 走行中バッジを隠してWBパネルのスペースを確保
+      document.getElementById('badge-speed').style.display  = 'none';
+      document.getElementById('badge-gear').style.display   = 'none';
+      document.getElementById('badge-engine').style.display = 'none';
     }
 
     function exitWorldBuildMode() {
@@ -3910,6 +3914,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       document.getElementById('fly-down-btn').style.display  = 'none';
       document.getElementById('wb-build-toggle-btn').classList.remove('active');
       document.getElementById('wb-build-toggle-btn').textContent = '🧱 建設';
+      // バッジ復元
+      document.getElementById('badge-speed').style.display  = '';
+      document.getElementById('badge-gear').style.display   = '';
+      document.getElementById('badge-engine').style.display = '';
     }
 
     function toggleWorldBuildMode() {
