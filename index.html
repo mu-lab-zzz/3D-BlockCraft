@@ -1049,7 +1049,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-06q · world-build</span>
+      <span class="footer-version">build 2026-08-07r · outer-ring</span>
     </div>
   </div>
 
@@ -3085,7 +3085,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       // ワールド切替
       survivalField.visible = true;
       scene.background      = new THREE.Color(0x6ab0e0);
-      scene.fog             = new THREE.Fog(0x8ec8e8, 90, 380);
+      scene.fog             = new THREE.Fog(0x8ec8e8, 90, 900);
       dirLight.intensity    = 1.0;
 
       initPhysicsWorld();
@@ -3351,12 +3351,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     // バイオームごとの大気色テーブル
     const BIOME_ATM = {
-      grassland: { fogR: 0.557, fogG: 0.784, fogB: 0.910, skyR: 0.416, skyG: 0.690, skyB: 0.878, near: 90,  far: 380 },
-      forest:    { fogR: 0.290, fogG: 0.431, fogB: 0.353, skyR: 0.172, skyG: 0.306, skyB: 0.227, near: 65,  far: 290 },
-      desert:    { fogR: 0.910, fogG: 0.788, fogB: 0.439, skyR: 0.831, skyG: 0.627, skyB: 0.188, near: 110, far: 420 },
-      canyon:    { fogR: 0.753, fogG: 0.408, fogB: 0.251, skyR: 0.541, skyG: 0.220, skyB: 0.094, near: 75,  far: 330 },
-      mountain:  { fogR: 0.588, fogG: 0.698, fogB: 0.800, skyR: 0.290, skyG: 0.478, skyB: 0.667, near: 65,  far: 310 },
-      tundra:    { fogR: 0.816, fogG: 0.910, fogB: 0.957, skyR: 0.533, skyG: 0.706, skyB: 0.831, near: 85,  far: 360 },
+      grassland: { fogR: 0.557, fogG: 0.784, fogB: 0.910, skyR: 0.416, skyG: 0.690, skyB: 0.878, near: 90,  far: 900 },
+      forest:    { fogR: 0.290, fogG: 0.431, fogB: 0.353, skyR: 0.172, skyG: 0.306, skyB: 0.227, near: 65,  far: 700 },
+      desert:    { fogR: 0.910, fogG: 0.788, fogB: 0.439, skyR: 0.831, skyG: 0.627, skyB: 0.188, near: 110, far: 980 },
+      canyon:    { fogR: 0.753, fogG: 0.408, fogB: 0.251, skyR: 0.541, skyG: 0.220, skyB: 0.094, near: 75,  far: 780 },
+      mountain:  { fogR: 0.588, fogG: 0.698, fogB: 0.800, skyR: 0.290, skyG: 0.478, skyB: 0.667, near: 65,  far: 740 },
+      tundra:    { fogR: 0.816, fogG: 0.910, fogB: 0.957, skyR: 0.533, skyG: 0.706, skyB: 0.831, near: 85,  far: 860 },
     };
 
     // バイオーム大気をリアルタイムに補間更新（サバイバル走行中に毎フレーム呼ぶ）
@@ -3678,6 +3678,82 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           physicsWorld.addBody(tb);
         }
       }
+
+      // 外周ビジュアルリング（低密度地形ストリップ × 4、内側 ±300m の外側を覆う）
+      const outerMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0 });
+      const outerStrips = [
+        { W: 2400, D: 900, sW: 48, sD: 18, ox:    0, oz: -750 },
+        { W: 2400, D: 900, sW: 48, sD: 18, ox:    0, oz:  750 },
+        { W:  900, D: 600, sW: 18, sD: 12, ox: -750, oz:    0 },
+        { W:  900, D: 600, sW: 18, sD: 12, ox:  750, oz:    0 },
+      ];
+      const outerEps = 2.0;
+      for (const { W, D, sW, sD, ox, oz } of outerStrips) {
+        const geo = new THREE.PlaneGeometry(W, D, sW, sD);
+        geo.rotateX(-Math.PI / 2);
+        const oPos = geo.attributes.position;
+        const oCol = [];
+        for (let i = 0; i < oPos.count; i++) {
+          const wx = oPos.getX(i) + ox;
+          const wz = oPos.getZ(i) + oz;
+          const wy = getTerrainHeight(wx, wz);
+          oPos.setY(i, wy);
+          const dHdx = (getTerrainHeight(wx + outerEps, wz) - getTerrainHeight(wx - outerEps, wz)) / (2 * outerEps);
+          const dHdz = (getTerrainHeight(wx, wz + outerEps) - getTerrainHeight(wx, wz - outerEps)) / (2 * outerEps);
+          const slope = Math.min(1, Math.sqrt(dHdx * dHdx + dHdz * dHdz) / 1.5);
+          const bw = _biomeWeights(wx, wz);
+          let cr = 0, cg = 0, cb = 0;
+          for (const [biome, weight] of Object.entries(bw)) {
+            if (weight < 0.001) continue;
+            const [br, bg, bb] = _biomeVertexColor(biome, wy, slope);
+            cr += br * weight; cg += bg * weight; cb += bb * weight;
+          }
+          const nc = Math.sin(wx * 0.31 + 1.1) * Math.cos(wz * 0.27 + 2.3) * 0.04;
+          oCol.push(
+            Math.max(0, Math.min(1, cr + nc)),
+            Math.max(0, Math.min(1, cg + nc * 0.6)),
+            Math.max(0, Math.min(1, cb + nc * 0.3))
+          );
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(oCol), 3));
+        oPos.needsUpdate = true;
+        geo.computeVertexNormals();
+        const strip = new THREE.Mesh(geo, outerMat);
+        strip.position.set(ox, 0, oz);
+        strip.receiveShadow = true;
+        strip.visible = false;
+        scene.add(strip);
+        terrainObjects.push(strip);
+      }
+
+      // 外周岩（半径 300–900m、視覚的散布）
+      const ORMAX = 120;
+      const iOrockG = new THREE.InstancedMesh(geoRock, matRockG, ORMAX);
+      const iOrockM = new THREE.InstancedMesh(geoRock, matRockM, ORMAX);
+      iOrockG.castShadow = iOrockG.receiveShadow = true; iOrockG.visible = false; iOrockG.count = 0;
+      iOrockM.castShadow = iOrockM.receiveShadow = true; iOrockM.visible = false; iOrockM.count = 0;
+      scene.add(iOrockG); terrainObjects.push(iOrockG);
+      scene.add(iOrockM); terrainObjects.push(iOrockM);
+      const rng4 = mulberry32(0x9A3C);
+      for (let i = 0; i < 400; i++) {
+        const angle4 = rng4() * Math.PI * 2;
+        const dist4  = 300 + rng4() * 600;
+        const ox4 = Math.cos(angle4) * dist4, oz4 = Math.sin(angle4) * dist4;
+        const y4  = getTerrainHeight(ox4, oz4);
+        const s4  = 0.8 + rng4() * 4.5;
+        const sx4 = 1 + rng4() * 0.7, sy4 = 0.4 + rng4() * 0.8, sz4 = 1 + rng4() * 0.7;
+        const bw4 = _biomeWeights(ox4, oz4);
+        const dom4 = Object.entries(bw4).sort((a, b) => b[1] - a[1])[0][0];
+        const im4 = (dom4 === 'mountain' || dom4 === 'tundra') ? iOrockM : iOrockG;
+        if (im4.count >= ORMAX) continue;
+        dummy.position.set(ox4, y4 + s4 * sy4 * 0.55, oz4);
+        dummy.rotation.set(rng4() * Math.PI, rng4() * Math.PI, rng4() * Math.PI);
+        dummy.scale.set(sx4 * s4, sy4 * s4, sz4 * s4);
+        dummy.updateMatrix();
+        im4.setMatrixAt(im4.count++, dummy.matrix);
+      }
+      iOrockG.instanceMatrix.needsUpdate = true;
+      iOrockM.instanceMatrix.needsUpdate = true;
     }
 
     // ===== ワールドブロック: チャンクリビルド =====
@@ -4039,7 +4115,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         // 地形より下に潜らないよう制限
         const minY = getTerrainHeight(wbCam.pos.x, wbCam.pos.z) + PLAYER_EYE;
         wbCam.pos.y = Math.max(minY, wbCam.pos.y);
-        const B = 295;
+        const B = 590;
         wbCam.pos.x = Math.max(-B, Math.min(B, wbCam.pos.x));
         wbCam.pos.z = Math.max(-B, Math.min(B, wbCam.pos.z));
         // カメラを FPS 視点に切替（updateSurvivalCamera の上書き）
