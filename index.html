@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-08b · vehicle-recovery</span>
+      <span class="footer-version">build 2026-08-08c · tire-individuality</span>
     </div>
   </div>
 
@@ -1367,10 +1367,22 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     const VEHICLE_TURN_SPEED = 2.0;
     let   survivalCamDist    = 20;
     const SURVIVAL_CAM_H     = 7;
-    const WHEEL_GROUND_OFFSET  = 0.83;  // タイヤ半径 - ハブY中心 (1.33 - 0.5)
-    const TYRE_RADIUS          = 1.33;  // R + tubeR of the torus
+    const WHEEL_GROUND_OFFSET  = 0.83;  // 小型タイヤ基準の地上高オフセット（kinematic fallback・視覚用）
     const SUSP_REST_LEN        = 0.35;  // サスペンション自然長
     const VEHICLE_ENGINE_FORCE = 2200;  // fallback（通常は質量比例で上書き）
+
+    // ===== タイヤ種別スタッツ（frictionSlip ↑ ⇔ speedMult ↓ の逆相関でバランス） =====
+    // wheel    : 標準バランス型
+    // wheel3   : オフロード —— 高グリップ・柔サス・低速
+    // wheel5   : スポーツ  —— 低グリップ・硬サス・高速
+    // wheel5t2 : ヘビーデューティ —— 最高グリップ・中サス・最低速
+    const TIRE_STATS = {
+      wheel:    { radius: 1.33, hubCY: 0.50, frictionSlip: 5.0, suspStiffness: 40, dampRelax: 2.5, dampCompress: 3.0, engineMult: 1.00, speedMult: 1.00 },
+      wheel3:   { radius: 1.41, hubCY: 1.50, frictionSlip: 7.5, suspStiffness: 22, dampRelax: 2.0, dampCompress: 2.5, engineMult: 0.70, speedMult: 0.75 },
+      wheel5:   { radius: 2.47, hubCY: 2.50, frictionSlip: 3.5, suspStiffness: 55, dampRelax: 3.0, dampCompress: 4.0, engineMult: 1.35, speedMult: 1.55 },
+      wheel5t2: { radius: 2.47, hubCY: 2.50, frictionSlip: 9.0, suspStiffness: 32, dampRelax: 2.5, dampCompress: 3.5, engineMult: 0.60, speedMult: 0.65 },
+    };
+    let vehicleMaxSpeedMult = 1.0;
     const VEHICLE_STEER_MAX    = 0.52;
     const VEHICLE_BRAKE_FORCE  = 40;
     let engineForcePerWheel    = VEHICLE_ENGINE_FORCE; // buildVehiclePhysics で質量比例に設定
@@ -3477,7 +3489,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       currentSteer = 0;
 
       const groundY = getTerrainHeight(vehicleCentroid.x, vehicleCentroid.z);
-      const initY   = groundY + WHEEL_GROUND_OFFSET + vehicleCentroid.y;
 
       // ブロック合計質量
       const totalMass = Math.max(100, blocksHistory.reduce((s, h) => s + getBlockMass(h.type), 0));
@@ -3485,9 +3496,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       chassisBody = new CANNON.Body({
         mass: totalMass,
         linearDamping:  0.05,
-        angularDamping: 0.3,  // 低めにして物理に任せる
+        angularDamping: 0.3,
       });
-      chassisBody.position.set(vehicleCentroid.x, initY, vehicleCentroid.z);
+      // initY は後でタイヤ種別を確認してから設定
 
       // 非タイヤブロックの AABB から chassis collision shape を生成
       const nonWheels = blocksHistory.filter(h => h.type !== 'wheel' && !isLargeWheelType(h.type));
@@ -3518,13 +3529,27 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         indexUpAxis:      1,
       });
 
+      // 全タイヤブロック（小型 + 大型）を物理ホイールとして登録
       wheelInfosMeta = [];
-      const wheelBlocks = blocksHistory.filter(h => h.type === 'wheel');
-      wheelBlocks.forEach(({ group, rot }) => {
+      const wheelBlocks = blocksHistory.filter(h => h.type === 'wheel' || isLargeWheelType(h.type));
+
+      // initY: 最も地上高が必要なタイヤ種別に合わせてシャーシ初期Y位置を決定
+      let maxGroundOffset = 0;
+      wheelBlocks.forEach(({ type }) => {
+        const st = TIRE_STATS[type];
+        if (st) maxGroundOffset = Math.max(maxGroundOffset, st.radius - st.hubCY);
+      });
+      const initY = groundY + maxGroundOffset + vehicleCentroid.y;
+      chassisBody.position.set(vehicleCentroid.x, initY, vehicleCentroid.z);
+
+      wheelBlocks.forEach(({ group, type, rot }) => {
+        const stats = TIRE_STATS[type] || TIRE_STATS['wheel'];
+        const dim   = getBlockDimensions(type, rot);
+
         const lx = group.position.x - vehicleCentroid.x;
         const lz = group.position.z - vehicleCentroid.z;
 
-        // ローカル軸方向（ブロック自身のローカル空間）
+        // アクスル方向（全タイヤ共通: rotSteps で決定）
         const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
         let ax = 0, az = 0;
         if      (rotSteps === 0) ax =  1;
@@ -3532,45 +3557,58 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         else if (rotSteps === 1) az =  1;
         else                     az = -1;
 
-        // ローカル→シャーシローカル変換: ホイールブロックのY回転を適用
-        // FL(rot=180)はグループがRy(π)なのでローカル-Xがシャーシ+X方向になる
         const origRotY = group.rotation.y;
         const c = Math.cos(origRotY), s = Math.sin(origRotY);
-        const cax = ax * c + az * s;   // chassis-local axle X
-        const caz = -ax * s + az * c;  // chassis-local axle Z
+        const cax = ax * c + az * s;
+        const caz = -ax * s + az * c;
 
-        // タイヤ中心のシャーシローカル座標 = グループ位置 + ワールド軸オフセット
-        const connX = lx + cax;
-        const connY = (0.5 - vehicleCentroid.y) + SUSP_REST_LEN;
-        const connZ = lz + caz;
+        // ハブ中心のブロックローカル XZ オフセット
+        // wheel(1x1): ハブはアクスル方向1単位先 → spec_cx=ax, spec_cz=az
+        // 大型タイヤ: ハブはブロック中心 → spec_cx=w/2-0.5, spec_cz=d/2-0.5
+        const spec_cx = (type === 'wheel') ? ax : (dim.w / 2 - 0.5);
+        const spec_cz = (type === 'wheel') ? az : (dim.d / 2 - 0.5);
+        const chassis_cx = spec_cx * c + spec_cz * s;
+        const chassis_cz = -spec_cx * s + spec_cz * c;
+
+        const connX = lx + chassis_cx;
+        const connY = (group.position.y + stats.hubCY - vehicleCentroid.y) + SUSP_REST_LEN;
+        const connZ = lz + chassis_cz;
+        const isRear = (lz + chassis_cz) <= 0;
 
         rayVehicle.addWheel({
-          radius:                      TYRE_RADIUS,
+          radius:                      stats.radius,
           directionLocal:              new CANNON.Vec3(0, -1, 0),
-          axleLocal:                   new CANNON.Vec3(cax, 0, caz),  // 正しいシャーシローカル軸
+          axleLocal:                   new CANNON.Vec3(cax, 0, caz),
           chassisConnectionPointLocal: new CANNON.Vec3(connX, connY, connZ),
-          suspensionStiffness:         40,
+          suspensionStiffness:         stats.suspStiffness,
           suspensionRestLength:        SUSP_REST_LEN,
-          frictionSlip:                5.0,
-          dampingRelaxation:           2.5,
-          dampingCompression:          3.0,
+          frictionSlip:                stats.frictionSlip,
+          dampingRelaxation:           stats.dampRelax,
+          dampingCompression:          stats.dampCompress,
           maxSuspensionForce:          200000,
           rollInfluence:               0.05,
           maxSuspensionTravel:         0.6,
         });
 
-        // 視覚同期: ax/az はローカル値を保存（updateVehicleTransformでapplyQuaternionして変換）
         wheelInfosMeta.push({
-          isRear:   lz <= 0,
+          isRear,
           group,
           origRotY,
           ax, az,
+          engineMult: stats.engineMult,
+          speedMult:  stats.speedMult,
         });
       });
 
-      // エンジン力を質量比例で決定（過大な力はウィリー→前輪浮き→操舵不能を招く）
+      // エンジン力を質量比例で決定
       const rearCount = Math.max(1, wheelInfosMeta.filter(m => m.isRear).length);
       engineForcePerWheel = totalMass * VEHICLE_ACCEL * 1.3 / rearCount;
+
+      // 後輪の speedMult 平均を車両全体の最高速倍率とする
+      const rearMeta = wheelInfosMeta.filter(m => m.isRear);
+      vehicleMaxSpeedMult = rearMeta.length > 0
+        ? rearMeta.reduce((sum, m) => sum + m.speedMult, 0) / rearMeta.length
+        : 1.0;
 
       rayVehicle.addToWorld(physicsWorld);
     }
@@ -4149,14 +4187,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         // ===== Cannon-es 物理 =====
         const spdNow = Math.hypot(chassisBody.velocity.x, chassisBody.velocity.z);
 
-        // cannon-es RaycastVehicle は正のエンジンフォースで -Z に進むため符号反転（W = +Z 前進）
-        // 最高速度到達後はエンジンカット
-        let engineForce = -gasInput * engineForcePerWheel;
-        if (spdNow > VEHICLE_MAX_SPEED * 1.35) engineForce = 0;
+        // タイヤ種別の speedMult を反映した速度上限でエンジンカット
+        const effectiveMaxSpeed = VEHICLE_MAX_SPEED * vehicleMaxSpeedMult;
+        const baseForce = -gasInput * engineForcePerWheel;
+        const overSpeed  = spdNow > effectiveMaxSpeed * 1.35;
 
-        // ステアリング補間（瞬時切り替えではなく滑らかに追従）
-        // キネマティック時代と同じ回転方向（D = yaw 減少 = 右折）→ 負符号
-        // 速度感応: 高速時は舵角を絞ってスピンを防ぐ
+        // ステアリング補間
         const steerScale = 1 / (1 + spdNow * 0.06);
         const targetSteer = -steerInput * VEHICLE_STEER_MAX * steerScale;
         currentSteer += (targetSteer - currentSteer) * Math.min(1, STEER_SPEED * dt);
@@ -4166,8 +4202,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         for (let i = 0; i < numW; i++) {
           const meta = wheelInfosMeta[i];
           if (meta.isRear) {
-            // 後輪駆動: 接地していない場合も含め engine force を渡す（RaycastVehicle が接地判定）
-            rayVehicle.applyEngineForce(engineForce, i);
+            // タイヤ個別の engineMult でホイールごとに力を変える
+            const wheelForce = overSpeed ? 0 : baseForce * (meta.engineMult ?? 1.0);
+            rayVehicle.applyEngineForce(wheelForce, i);
             rayVehicle.setSteeringValue(0, i);
           } else {
             rayVehicle.applyEngineForce(0, i);
