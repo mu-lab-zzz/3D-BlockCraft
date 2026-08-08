@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-08e · tire-black</span>
+      <span class="footer-version">build 2026-08-08f · connector-fix</span>
     </div>
   </div>
 
@@ -2573,7 +2573,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const hit = intersects[i];
         if (hit.object === plane) continue;
         const grp = hit.object.parent;
-        if (!grp || grp.userData.blockType !== 'connector') continue;
+        // 非コネクターブロックに当たったら透過しない（配置済みブロック越しに検出しない）
+        if (!grp || grp.userData.blockType !== 'connector') break;
 
         // disc/pegメッシュ直接ヒット
         if (hit.object.userData.isConnectorFace) {
