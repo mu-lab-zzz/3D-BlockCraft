@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-08d · wheel-color</span>
+      <span class="footer-version">build 2026-08-08e · tire-black</span>
     </div>
   </div>
 
@@ -1691,7 +1691,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function createWheelMesh(color, rot) {
       const group = new THREE.Group();
       const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
-      const tireMat = new THREE.MeshStandardMaterial({ color, roughness: 0.95 });
+      const tireMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.95 });
 
       const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
       let axleX = 0, axleZ = 0;
@@ -1753,7 +1753,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const w = dim.w, d = dim.d, h = dim.h;
 
       const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.1 });
-      const tireMat = new THREE.MeshStandardMaterial({ color, roughness: 0.95 });
+      const tireMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.95 });
 
       const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
       const axleAlongX = (rotSteps === 0 || rotSteps === 2);
