@@ -535,6 +535,33 @@
       white-space: nowrap;
     }
     #survival-exit-btn:active { transform: scale(0.95); }
+    #survival-recover-btn {
+      pointer-events: auto;
+      background: rgba(217,119,6,0.88);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      border: 1px solid rgba(251,191,36,0.35);
+      padding: 10px 22px;
+      border-radius: 22px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform 0.1s;
+      white-space: nowrap;
+    }
+    #survival-recover-btn:active { transform: scale(0.95); }
+    #badge-flip {
+      display: none;
+      background: rgba(127,0,0,0.75);
+      border-color: rgba(239,68,68,0.5);
+      animation: flipPulse 0.7s ease-in-out infinite alternate;
+    }
+    #badge-flip .survival-num { color: #fca5a5; font-size: 20px; }
+    @keyframes flipPulse {
+      from { opacity: 0.75; }
+      to   { opacity: 1.0; }
+    }
     #survival-enter-btn {
       display: none;
       position: absolute;
@@ -1049,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-08a · chunk-streaming</span>
+      <span class="footer-version">build 2026-08-08b · vehicle-recovery</span>
     </div>
   </div>
 
@@ -1171,6 +1198,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   <div id="survival-hud">
     <button id="survival-exit-btn" onclick="exitSurvivalMode()">🏗 組立へ</button>
     <button id="wb-build-toggle-btn" onclick="toggleWorldBuildMode()">🧱 建設</button>
+    <button id="survival-recover-btn" onclick="recoverVehicle()">↩ 回復</button>
+    <div class="survival-badge" id="badge-flip">
+      <div class="survival-num" id="flip-countdown">3</div>
+      <div class="survival-badge-label">転倒 自動回復</div>
+    </div>
     <div class="survival-badge" id="badge-speed">
       <div class="survival-num" id="survival-speed">0</div>
       <div class="survival-badge-label">km/h</div>
@@ -1408,6 +1440,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let rayVehicle     = null;
     let wheelInfosMeta = []; // { isRear, group, origRotY, ax, az } per physics wheel
     let currentSteer   = 0;  // ステアリング補間状態 (rad)
+    let _flipTimer     = 0;  // 転倒継続秒数（自動回復カウンター）
+    const FLIP_AUTO_DELAY = 3.0; // 転倒後の自動回復までの秒数
     const STEER_SPEED  = 5;  // ステアリング補間速度 (rad/s)
 
     // キーボード入力（PC テスト用）
@@ -3004,6 +3038,23 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       updateCameraPosition();
     }
 
+    // ===== 車両回復 =====
+    function recoverVehicle() {
+      if (chassisBody) {
+        const x = chassisBody.position.x;
+        const z = chassisBody.position.z;
+        const groundY = getTerrainHeight(x, z);
+        chassisBody.position.set(x, groundY + 2.5, z);
+        chassisBody.velocity.set(0, 0, 0);
+        chassisBody.angularVelocity.set(0, 0, 0);
+        chassisBody.quaternion.setFromEuler(0, vehicleState.yaw, 0);
+      } else {
+        vehicleState.speed = 0;
+      }
+      _flipTimer = 0;
+      document.getElementById('badge-flip').style.display = 'none';
+    }
+
     // ===== サバイバルモード =====
     function enterSurvivalMode() {
       if (gameMode === 'survival') return;
@@ -4081,6 +4132,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           Math.cos(wbCam.yaw)  * Math.cos(wbCam.pitch)
         );
         camera.lookAt(wbCam.pos.clone().add(lookDir));
+        // WBモード中は転倒バッジ非表示
+        document.getElementById('badge-flip').style.display = 'none';
+        _flipTimer = 0;
         // プレビューと雰囲気
         _updateWBPreview();
         _updateTerrainChunks(wbCam.pos.x, wbCam.pos.z);
@@ -4137,6 +4191,21 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const gearEl = document.getElementById('survival-gear');
         gearEl.textContent = fwdVel >= -0.5 ? 'D' : 'R';
         gearEl.style.color = fwdVel >= -0.5 ? '#22c55e' : '#ef4444';
+
+        // 転倒検知: シャーシのローカルY軸（上方向）がワールドY下向きなら転倒
+        const vUp = new CANNON.Vec3(0, 1, 0);
+        chassisBody.quaternion.vmult(vUp, vUp);
+        const isFlipped = vUp.y < 0.15;
+        const flipEl = document.getElementById('badge-flip');
+        if (isFlipped) {
+          _flipTimer += dt;
+          flipEl.style.display = 'flex';
+          document.getElementById('flip-countdown').textContent = Math.ceil(Math.max(0, FLIP_AUTO_DELAY - _flipTimer));
+          if (_flipTimer >= FLIP_AUTO_DELAY) recoverVehicle();
+        } else {
+          _flipTimer = 0;
+          flipEl.style.display = 'none';
+        }
       } else {
         // ===== キネマティック fallback =====
         if (Math.abs(gasInput) > 0.05) {
