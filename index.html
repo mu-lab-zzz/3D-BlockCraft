@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09h · wheel-center-align</span>
+      <span class="footer-version">build 2026-08-09i · large-wheel-redesign</span>
     </div>
   </div>
 
@@ -1381,9 +1381,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // wheel5t2 : ヘビーデューティ —— 最高グリップ・中サス・最低速
     const TIRE_STATS = {
       wheel:    { radius: 1.33, hubCY: 0.50, frictionSlip: 5.0, suspStiffness: 40, dampRelax: 2.5, dampCompress: 3.0, engineMult: 1.00, speedMult: 1.00 },
-      wheel3:   { radius: 1.41, hubCY: 1.50, frictionSlip: 7.5, suspStiffness: 22, dampRelax: 2.0, dampCompress: 2.5, engineMult: 0.70, speedMult: 0.75 },
-      wheel5:   { radius: 2.47, hubCY: 2.50, frictionSlip: 3.5, suspStiffness: 55, dampRelax: 3.0, dampCompress: 4.0, engineMult: 1.35, speedMult: 1.55 },
-      wheel5t2: { radius: 2.47, hubCY: 2.50, frictionSlip: 9.0, suspStiffness: 32, dampRelax: 2.5, dampCompress: 3.5, engineMult: 0.60, speedMult: 0.65 },
+      wheel3:   { radius: 1.41, hubCY: 0.50, frictionSlip: 7.5, suspStiffness: 22, dampRelax: 2.0, dampCompress: 2.5, engineMult: 0.70, speedMult: 0.75 },
+      wheel5:   { radius: 2.47, hubCY: 0.50, frictionSlip: 3.5, suspStiffness: 55, dampRelax: 3.0, dampCompress: 4.0, engineMult: 1.35, speedMult: 1.55 },
+      wheel5t2: { radius: 2.47, hubCY: 0.50, frictionSlip: 9.0, suspStiffness: 32, dampRelax: 2.5, dampCompress: 3.5, engineMult: 0.60, speedMult: 0.65 },
     };
     let vehicleMaxSpeedMult = 1.0;
     const VEHICLE_STEER_MAX    = 0.52;
@@ -1569,13 +1569,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // --- ロジック関数 ---
     function getBlockDimensions(type, rot = currentRotation) {
       if (type === 'wheel') return { w: 1, d: 1, h: 1 };
-      if (isLargeWheelType(type)) {
-        const spec = getLargeWheelSpec(type);
-        const D = spec.diameter, T = spec.thickness;
-        const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
-        const axleAlongX = (rotSteps === 0 || rotSteps === 2);
-        return { w: axleAlongX ? T : D, d: axleAlongX ? D : T, h: D };
-      }
+      if (isLargeWheelType(type)) return { w: 1, d: 1, h: 1 };
       if (type === 'cyl' || type === 'cyl05') return { w: 1, d: 1, h: 1 };
       if (type === 'cylp' || type === 'cyl05p') return { w: 1, d: 1, h: 0.5 };
       if (type === 'connector') return { w: 1, d: 1, h: 1 };
@@ -1619,7 +1613,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function getOccupiedCells(originX, originHY, originZ, type, rot, tilt) {
-      if (type === 'wheel') return getWheelCells(originX, originHY, originZ, rot);
+      if (type === 'wheel' || isLargeWheelType(type)) return getWheelCells(originX, originHY, originZ, rot);
       // 横倒し円柱: 実効高さ = 直径（小型円柱のみ）
       if (tilt && isTiltableCylinder(type)) {
         const diameter = (type === 'cyl05' || type === 'cyl05p') ? 0.5 : 1.0;
@@ -1775,82 +1769,85 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function createLargeWheelMesh(type, color, rot) {
       const group = new THREE.Group();
-      const spec = getLargeWheelSpec(type);
-      const D = spec.diameter, T = spec.thickness;
-      const dim = getBlockDimensions(type, rot);
-      const w = dim.w, d = dim.d, h = dim.h;
-
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.1 });
+      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
       const tireMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.95 });
 
       const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
-      const axleAlongX = (rotSteps === 0 || rotSteps === 2);
+      let axleX = 0, axleZ = 0;
+      if      (rotSteps === 0) { axleX =  1; }
+      else if (rotSteps === 1) { axleZ =  1; }
+      else if (rotSteps === 2) { axleX = -1; }
+      else                     { axleZ = -1; }
 
-      // Wheel center in group local space
-      const cx = w / 2 - 0.5, cy = h / 2, cz = d / 2 - 0.5;
+      // 本体ブロック (1×1×1) — 小ホイールと同じ構造
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.99, 0.99, 0.99), mat);
+      body.castShadow = true;
+      body.receiveShadow = true;
+      body.position.set(0, 0.5, 0);
+      group.add(body);
 
-      // Torus parameters: outer_radius = R + tubeR ≈ h/2
-      let R, tubeR;
-      if (D === 3) {
-        R = 0.76; tubeR = 0.65;       // fat tire, 3-diameter
-      } else if (T === 1) {
-        R = 2.0;  tubeR = 0.47;       // thin tire, 5-diameter
-      } else {
-        R = 1.6;  tubeR = 0.87;       // fat tire, 5-diameter
+      // 本体上スタッド
+      const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12), mat);
+      stud.castShadow = true;
+      stud.position.set(0, 1.02, 0);
+      group.add(stud);
+
+      // タイヤパラメータ (外径 = R + tubeR ≈ TIRE_STATS.radius)
+      let R, tubeR, hubR, rimH;
+      if (type === 'wheel3') {
+        R = 0.99; tubeR = 0.42; hubR = 0.50; rimH = 0.40;
+      } else if (type === 'wheel5') {
+        R = 2.00; tubeR = 0.47; hubR = 1.40; rimH = 0.42;
+      } else { // wheel5t2
+        R = 1.60; tubeR = 0.87; hubR = 0.60; rimH = 0.80;
       }
 
-      // Tire torus
-      const tire = new THREE.Mesh(
-        new THREE.TorusGeometry(R, tubeR, 12, Math.max(24, D * 8)),
-        tireMat
-      );
+      // アクスル (本体中心→タイヤ中心、1ユニット)
+      const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.0, 8), mat);
+      axle.castShadow = true;
+      axle.position.set(axleX * 0.5, 0.5, axleZ * 0.5);
+      if (axleX !== 0) axle.rotation.z = Math.PI / 2;
+      else             axle.rotation.x = Math.PI / 2;
+      group.add(axle);
+
+      // タイヤ外周 (トーラス、黒) — タイヤ中心はアクスル1ユニット先
+      const segs = type === 'wheel3' ? 24 : 40;
+      const tire = new THREE.Mesh(new THREE.TorusGeometry(R, tubeR, 12, segs), tireMat);
       tire.castShadow = true;
-      tire.position.set(cx, cy, cz);
-      if (axleAlongX) tire.rotation.y = Math.PI / 2;
+      tire.position.set(axleX, 0.5, axleZ);
+      if (axleX !== 0) tire.rotation.y = Math.PI / 2;
       group.add(tire);
 
-      // Hub cylinder (along axle axis)
-      const hubR = h * 0.10;
-      const hubH = T - 0.2;
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(hubR, hubR, hubH, 12), mat);
-      hub.castShadow = true;
-      hub.position.set(cx, cy, cz);
-      if (axleAlongX) hub.rotation.z = Math.PI / 2;
-      else            hub.rotation.x = Math.PI / 2;
-      group.add(hub);
+      // ホイールハブ円板 (ブロックカラー)
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(hubR, hubR, rimH, 16), mat);
+      rim.castShadow = true;
+      rim.position.set(axleX, 0.5, axleZ);
+      if (axleX !== 0) rim.rotation.z = Math.PI / 2;
+      else             rim.rotation.x = Math.PI / 2;
+      group.add(rim);
 
-      // Hub end caps
-      const capGeo = new THREE.CylinderGeometry(hubR * 1.5, hubR * 1.5, 0.05, 12);
-      [-1, 1].forEach(side => {
-        const cap = new THREE.Mesh(capGeo, mat);
-        if (axleAlongX) {
-          cap.position.set(cx + side * hubH / 2, cy, cz);
-          cap.rotation.z = Math.PI / 2;
-        } else {
-          cap.position.set(cx, cy, cz + side * hubH / 2);
-          cap.rotation.x = Math.PI / 2;
-        }
-        group.add(cap);
-      });
-
-      // Spokes (for 5×5 wheels)
-      if (D >= 5) {
-        const numSpokes = 5;
-        const spokeLen = R - hubR - 0.1;
-        const spokeGeo = new THREE.CylinderGeometry(0.06, 0.06, spokeLen, 6);
-        for (let i = 0; i < numSpokes; i++) {
-          const angle = (i / numSpokes) * Math.PI * 2;
-          const halfL = hubR + spokeLen / 2;
-          const spoke = new THREE.Mesh(spokeGeo, mat);
-          spoke.castShadow = true;
-          if (axleAlongX) {
-            spoke.position.set(cx, cy + Math.sin(angle) * halfL, cz + Math.cos(angle) * halfL);
-            spoke.rotation.x = Math.PI / 2 - angle;
-          } else {
-            spoke.position.set(cx + Math.cos(angle) * halfL, cy + Math.sin(angle) * halfL, cz);
-            spoke.rotation.z = angle - Math.PI / 2;
+      // wheel5系: スポーク (5本)
+      if (type === 'wheel5' || type === 'wheel5t2') {
+        const spokeHubR = 0.15;
+        const spokeInner = spokeHubR + 0.05;
+        const spokeOuter = R - tubeR - 0.05;
+        if (spokeOuter > spokeInner) {
+          const spokeLen = spokeOuter - spokeInner;
+          const spokeGeo = new THREE.CylinderGeometry(0.06, 0.06, spokeLen, 6);
+          for (let i = 0; i < 5; i++) {
+            const angle = (i / 5) * Math.PI * 2;
+            const halfL = spokeInner + spokeLen / 2;
+            const spoke = new THREE.Mesh(spokeGeo, mat);
+            spoke.castShadow = true;
+            if (axleX !== 0) {
+              spoke.position.set(axleX, 0.5 + Math.sin(angle) * halfL, axleZ + Math.cos(angle) * halfL);
+              spoke.rotation.x = Math.PI / 2 - angle;
+            } else {
+              spoke.position.set(axleX + Math.cos(angle) * halfL, 0.5 + Math.sin(angle) * halfL, axleZ);
+              spoke.rotation.z = angle - Math.PI / 2;
+            }
+            group.add(spoke);
           }
-          group.add(spoke);
         }
       }
 
@@ -2713,19 +2710,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
                 rawHY = Math.round(hitGrp.position.y * 2);
               }
 
-              // タイヤ種別 × 側面ヒット: ホイール中心を対象ブロック中心に自動スナップ & 向きを自動設定
+              // タイヤ種別 × 側面ヒット: Y を対象ブロック中心に自動スナップ & 向きを自動設定
               if ((currentBlockType === 'wheel' || isLargeWheelType(currentBlockType))
                   && Math.abs(norm.y) < 0.5 && hitGrp) {
-                const _bbox = new THREE.Box3().setFromObject(hitGrp);
-                const _hitCenterY = (_bbox.min.y + _bbox.max.y) / 2;
-                if (isLargeWheelType(currentBlockType)) {
-                  const _D = getLargeWheelSpec(currentBlockType).diameter;
-                  // wheel center(world) = rawHY*0.5 + D/2 → _hitCenterY
-                  rawHY = Math.round(2 * _hitCenterY - _D);
-                } else {
-                  // 小ホイール: center = rawHY*0.5 + 0.5 → _hitCenterY
-                  rawHY = Math.round(2 * _hitCenterY - 1);
-                }
+                rawHY = Math.round(hitGrp.position.y * 2);
                 let autoRot = 0;
                 if      (norm.x >  0.5) autoRot = 0;
                 else if (norm.x < -0.5) autoRot = 180;
@@ -3669,11 +3657,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const cax = ax * c + az * s;
         const caz = -ax * s + az * c;
 
-        // ハブ中心のブロックローカル XZ オフセット
-        // wheel(1x1): ハブはアクスル方向1単位先 → spec_cx=ax, spec_cz=az
-        // 大型タイヤ: ハブはブロック中心 → spec_cx=w/2-0.5, spec_cz=d/2-0.5
-        const spec_cx = (type === 'wheel') ? ax : (dim.w / 2 - 0.5);
-        const spec_cz = (type === 'wheel') ? az : (dim.d / 2 - 0.5);
+        // ハブ中心のブロックローカル XZ オフセット: 全タイヤ共通でアクスル方向1単位先
+        const spec_cx = ax;
+        const spec_cz = az;
         const chassis_cx = spec_cx * c + spec_cz * s;
         const chassis_cz = -spec_cx * s + spec_cz * c;
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'blockcraft-v36';
+const CACHE_NAME = 'blockcraft-v37';
 const STATIC_ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
