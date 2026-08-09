@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09i · large-wheel-redesign</span>
+      <span class="footer-version">build 2026-08-09j · wheel5t2-long-axle</span>
     </div>
   </div>
 
@@ -1613,7 +1613,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function getOccupiedCells(originX, originHY, originZ, type, rot, tilt) {
-      if (type === 'wheel' || isLargeWheelType(type)) return getWheelCells(originX, originHY, originZ, rot);
+      if (type === 'wheel' || isLargeWheelType(type)) {
+        const tireOffset = type === 'wheel5t2' ? 2 : 1;
+        return getWheelCells(originX, originHY, originZ, rot, tireOffset);
+      }
       // 横倒し円柱: 実効高さ = 直径（小型円柱のみ）
       if (tilt && isTiltableCylinder(type)) {
         const diameter = (type === 'cyl05' || type === 'cyl05p') ? 0.5 : 1.0;
@@ -1637,7 +1640,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       return cells;
     }
 
-    function getWheelCells(originX, originHY, originZ, rot) {
+    function getWheelCells(originX, originHY, originZ, rot, tireOffset = 1) {
       const cells = [];
       const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
       let axleX = 0, axleZ = 0;
@@ -1650,13 +1653,20 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       cells.push(`${originX},${originHY},${originZ}`);
       cells.push(`${originX},${originHY+1},${originZ}`);
 
+      // アクスル中間セル (tireOffset > 1 の場合)
+      for (let s = 1; s < tireOffset; s++) {
+        const sx = originX + axleX * s;
+        const sz = originZ + axleZ * s;
+        cells.push(`${sx},${originHY},${sz}`);
+        cells.push(`${sx},${originHY+1},${sz}`);
+      }
+
       // 車輪: アクスル先端を中心に Y方向±1フルユニット × 垂直方向3列
-      // 各フルユニットY = 半グリッド2セル
-      const wx = originX + axleX;
-      const wz = originZ + axleZ;
-      for (let dy = -1; dy <= 1; dy++) {          // フルユニットYオフセット
-        const hy = originHY + dy * 2;              // 半グリッドY基点
-        for (let dp = -1; dp <= 1; dp++) {         // 垂直方向オフセット
+      const wx = originX + axleX * tireOffset;
+      const wz = originZ + axleZ * tireOffset;
+      for (let dy = -1; dy <= 1; dy++) {
+        const hy = originHY + dy * 2;
+        for (let dp = -1; dp <= 1; dp++) {
           const cx = axleX !== 0 ? wx : originX + dp;
           const cz = axleZ !== 0 ? wz : originZ + dp;
           cells.push(`${cx},${hy},${cz}`);
@@ -1802,26 +1812,29 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         R = 1.60; tubeR = 0.87; hubR = 0.60; rimH = 0.80;
       }
 
-      // アクスル (本体中心→タイヤ中心、1ユニット)
-      const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.0, 8), mat);
+      // wheel5t2 はアクスル2ユニット (他は1ユニット)
+      const tireOffset = type === 'wheel5t2' ? 2 : 1;
+
+      // アクスル
+      const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, tireOffset, 8), mat);
       axle.castShadow = true;
-      axle.position.set(axleX * 0.5, 0.5, axleZ * 0.5);
+      axle.position.set(axleX * tireOffset / 2, 0.5, axleZ * tireOffset / 2);
       if (axleX !== 0) axle.rotation.z = Math.PI / 2;
       else             axle.rotation.x = Math.PI / 2;
       group.add(axle);
 
-      // タイヤ外周 (トーラス、黒) — タイヤ中心はアクスル1ユニット先
+      // タイヤ外周 (トーラス、黒)
       const segs = type === 'wheel3' ? 24 : 40;
       const tire = new THREE.Mesh(new THREE.TorusGeometry(R, tubeR, 12, segs), tireMat);
       tire.castShadow = true;
-      tire.position.set(axleX, 0.5, axleZ);
+      tire.position.set(axleX * tireOffset, 0.5, axleZ * tireOffset);
       if (axleX !== 0) tire.rotation.y = Math.PI / 2;
       group.add(tire);
 
       // ホイールハブ円板 (ブロックカラー)
       const rim = new THREE.Mesh(new THREE.CylinderGeometry(hubR, hubR, rimH, 16), mat);
       rim.castShadow = true;
-      rim.position.set(axleX, 0.5, axleZ);
+      rim.position.set(axleX * tireOffset, 0.5, axleZ * tireOffset);
       if (axleX !== 0) rim.rotation.z = Math.PI / 2;
       else             rim.rotation.x = Math.PI / 2;
       group.add(rim);
@@ -1834,16 +1847,17 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         if (spokeOuter > spokeInner) {
           const spokeLen = spokeOuter - spokeInner;
           const spokeGeo = new THREE.CylinderGeometry(0.06, 0.06, spokeLen, 6);
+          const tx = axleX * tireOffset, tz = axleZ * tireOffset;
           for (let i = 0; i < 5; i++) {
             const angle = (i / 5) * Math.PI * 2;
             const halfL = spokeInner + spokeLen / 2;
             const spoke = new THREE.Mesh(spokeGeo, mat);
             spoke.castShadow = true;
             if (axleX !== 0) {
-              spoke.position.set(axleX, 0.5 + Math.sin(angle) * halfL, axleZ + Math.cos(angle) * halfL);
+              spoke.position.set(tx, 0.5 + Math.sin(angle) * halfL, tz + Math.cos(angle) * halfL);
               spoke.rotation.x = Math.PI / 2 - angle;
             } else {
-              spoke.position.set(axleX + Math.cos(angle) * halfL, 0.5 + Math.sin(angle) * halfL, axleZ);
+              spoke.position.set(tx + Math.cos(angle) * halfL, 0.5 + Math.sin(angle) * halfL, tz);
               spoke.rotation.z = angle - Math.PI / 2;
             }
             group.add(spoke);
@@ -3657,9 +3671,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const cax = ax * c + az * s;
         const caz = -ax * s + az * c;
 
-        // ハブ中心のブロックローカル XZ オフセット: 全タイヤ共通でアクスル方向1単位先
-        const spec_cx = ax;
-        const spec_cz = az;
+        // ハブ中心のブロックローカル XZ オフセット (wheel5t2 のみ2単位先)
+        const _tOff = type === 'wheel5t2' ? 2 : 1;
+        const spec_cx = ax * _tOff;
+        const spec_cz = az * _tOff;
         const chassis_cx = spec_cx * c + spec_cz * s;
         const chassis_cz = -spec_cx * s + spec_cz * c;
 
