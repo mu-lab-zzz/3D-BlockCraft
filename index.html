@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09b · underside-view</span>
+      <span class="footer-version">build 2026-08-09c · brighter-shadows</span>
     </div>
   </div>
 
@@ -1504,7 +1504,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     container.appendChild(renderer.domElement);
 
     // ライティング（HemisphereLight で地形の陰影を自然に）
-    const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x4a3a1e, 0.55);
+    const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x4a3a1e, 0.85);
     scene.add(hemiLight);
     const dirLight = new THREE.DirectionalLight(0xfff5e0, 0.85);
     dirLight.position.set(25, 40, 25);
