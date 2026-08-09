@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09k · wheel5t2-torque</span>
+      <span class="footer-version">build 2026-08-09l · picker-reorganize</span>
     </div>
   </div>
 
@@ -2853,12 +2853,30 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const picker = document.getElementById('block-picker');
       picker.innerHTML = '';
 
+      function addSection(titleText, types) {
+        const title = document.createElement('div');
+        title.className = 'bp-section-title';
+        title.textContent = titleText;
+        picker.appendChild(title);
+        const grid = document.createElement('div');
+        grid.className = 'bp-grid';
+        types.forEach(({ type, label, title: tip }) => {
+          const btn = document.createElement('button');
+          btn.className = 'opt-btn' + (type === currentBlockType ? ' active' : '');
+          btn.textContent = label;
+          if (tip) btn.title = tip;
+          btn.addEventListener('click', () => selectBlockType(type, btn));
+          grid.appendChild(btn);
+        });
+        picker.appendChild(grid);
+      }
+
+      // 標準ブロック
       ['', 'p'].forEach(suffix => {
         const title = document.createElement('div');
         title.className = 'bp-section-title';
         title.textContent = suffix === '' ? '■ 標準ブロック' : '▬ 薄板 (高さ×0.5)';
         picker.appendChild(title);
-
         const grid = document.createElement('div');
         grid.className = 'bp-grid';
         BLOCK_SIZES.forEach(([w, d]) => {
@@ -2872,95 +2890,37 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         picker.appendChild(grid);
       });
 
-      // 特殊ブロック
-      const specialTitle = document.createElement('div');
-      specialTitle.className = 'bp-section-title';
-      specialTitle.textContent = '⚙ 特殊ブロック';
-      picker.appendChild(specialTitle);
+      // タイヤ
+      addSection('⊙ タイヤ', [
+        { type: 'wheel',    label: 'タイヤ',     title: '標準タイヤ' },
+        { type: 'wheel3',   label: 'タイヤ径3',  title: '直径3 オフロード' },
+        { type: 'wheel5',   label: 'タイヤ径5',  title: '直径5 スポーツ' },
+        { type: 'wheel5t2', label: 'タイヤ径5厚', title: '直径5 ヘビーデューティ' },
+      ]);
 
-      const specialGrid = document.createElement('div');
-      specialGrid.className = 'bp-grid';
-
-      const specialTypes = [
-        { type: 'wheel',    label: 'タイヤ',  title: '回転でアクスル方向を変更' },
-        { type: 'connector', label: '接続面', title: '回転で接続面の向きを変更' },
-        { type: 'cyl',      label: '円柱',   title: '直径1 高さ1' },
-        { type: 'cylp',     label: '円柱薄', title: '直径1 高さ0.5' },
-        { type: 'cyl05',    label: '細柱',   title: '直径0.5 高さ1' },
-        { type: 'cyl05p',   label: '細柱薄', title: '直径0.5 高さ0.5' },
-      ];
-      specialTypes.forEach(({ type, label, title }) => {
-        const btn = document.createElement('button');
-        btn.className = 'opt-btn' + (currentBlockType === type ? ' active' : '');
-        btn.textContent = label;
-        btn.title = title;
-        btn.addEventListener('click', () => selectBlockType(type, btn));
-        specialGrid.appendChild(btn);
+      // 円柱
+      const cylTypes = [];
+      [['cyl','円柱'],['cylp','円柱薄'],['cyl05','細柱'],['cyl05p','細柱薄']].forEach(([type, label]) => {
+        cylTypes.push({ type, label });
       });
-      picker.appendChild(specialGrid);
-
-      // 大型円柱セクション
-      const largeCylTitle = document.createElement('div');
-      largeCylTitle.className = 'bp-section-title';
-      largeCylTitle.textContent = '◯ 大型円柱';
-      picker.appendChild(largeCylTitle);
-
-      const largeCylGrid = document.createElement('div');
-      largeCylGrid.className = 'bp-grid';
       [2, 3, 4, 5].forEach(n => {
         ['', 'p'].forEach(suffix => {
-          const type = `cyl${n}${suffix}`;
-          const label = `円柱${n}${suffix === 'p' ? '薄' : ''}`;
-          const title = `直径${n} 高さ${suffix === 'p' ? '0.5' : '1'}`;
-          const btn = document.createElement('button');
-          btn.className = 'opt-btn' + (currentBlockType === type ? ' active' : '');
-          btn.textContent = label;
-          btn.title = title;
-          btn.addEventListener('click', () => selectBlockType(type, btn));
-          largeCylGrid.appendChild(btn);
+          cylTypes.push({ type: `cyl${n}${suffix}`, label: `円柱${n}${suffix === 'p' ? '薄' : ''}` });
         });
       });
-      picker.appendChild(largeCylGrid);
+      addSection('◯ 円柱', cylTypes);
 
-      // 大型タイヤセクション
-      const largeWheelTitle = document.createElement('div');
-      largeWheelTitle.className = 'bp-section-title';
-      largeWheelTitle.textContent = '⊙ 大型タイヤ';
-      picker.appendChild(largeWheelTitle);
+      // コクピット
+      addSection('🚀 コクピット', [
+        ['cockpit1x1','CP 1×1'],['cockpit2x2','CP 2×2'],
+        ['cockpit2x3','CP 2×3'],['cockpit2x4','CP 2×4'],
+      ].map(([type, label]) => ({ type, label })));
 
-      const largeWheelGrid = document.createElement('div');
-      largeWheelGrid.className = 'bp-grid';
-      [
-        { type: 'wheel3',   label: 'タイヤ径3', title: '直径3 厚み2' },
-        { type: 'wheel5',   label: 'タイヤ径5', title: '直径5 厚み1' },
-        { type: 'wheel5t2', label: 'タイヤ径5厚', title: '直径5 厚み2' },
-      ].forEach(({ type, label, title }) => {
-        const btn = document.createElement('button');
-        btn.className = 'opt-btn' + (currentBlockType === type ? ' active' : '');
-        btn.textContent = label;
-        btn.title = title;
-        btn.addEventListener('click', () => selectBlockType(type, btn));
-        largeWheelGrid.appendChild(btn);
-      });
-      picker.appendChild(largeWheelGrid);
-
-      // コクピットセクション
-      const cockpitTitle = document.createElement('div');
-      cockpitTitle.className = 'bp-section-title';
-      cockpitTitle.textContent = '🚀 コクピット';
-      picker.appendChild(cockpitTitle);
-
-      const cockpitGrid = document.createElement('div');
-      cockpitGrid.className = 'bp-grid';
-      [['cockpit1x1','1×1'],['cockpit2x2','2×2'],['cockpit2x3','2×3'],['cockpit2x4','2×4']].forEach(([type, sizeLabel]) => {
-        const btn = document.createElement('button');
-        btn.className = 'opt-btn' + (currentBlockType === type ? ' active' : '');
-        btn.textContent = 'CP ' + sizeLabel;
-        btn.title = `コクピット ${sizeLabel}`;
-        btn.addEventListener('click', () => selectBlockType(type, btn));
-        cockpitGrid.appendChild(btn);
-      });
-      picker.appendChild(cockpitGrid);
+      // その他
+      // その他
+      addSection('⚙ その他', [
+        { type: 'connector', label: '接続面', title: '回転で接続面の向きを変更' },
+      ]);
     }
 
     function selectBlockType(type, btn) {
