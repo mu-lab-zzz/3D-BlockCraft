@@ -632,6 +632,104 @@
       z-index: 25;
     }
     #pickup-toast.show { opacity: 1; }
+    /* ===== 拠点インベントリ ===== */
+    #base-range-btn {
+      display: none;
+      pointer-events: auto;
+      background: rgba(5,150,105,0.88);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      border: 1px solid rgba(110,231,183,0.4);
+      padding: 10px 22px;
+      border-radius: 22px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform 0.1s;
+      white-space: nowrap;
+    }
+    #base-range-btn:active { transform: scale(0.95); }
+    #base-inv-panel {
+      display: none;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(10,20,35,0.92);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(110,231,183,0.3);
+      border-radius: 20px;
+      padding: 24px 28px;
+      min-width: 260px;
+      z-index: 35;
+      color: #e2e8f0;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    #base-inv-title {
+      font-size: 16px;
+      font-weight: 800;
+      text-align: center;
+      margin-bottom: 20px;
+      color: #6ee7b7;
+      letter-spacing: 0.05em;
+    }
+    #base-inv-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .base-inv-cell {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 14px 10px;
+      text-align: center;
+    }
+    .base-inv-icon { font-size: 24px; line-height: 1; margin-bottom: 6px; }
+    .base-inv-name { font-size: 10px; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+    .base-inv-count { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: #fff; }
+    #base-inv-total {
+      text-align: center;
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 18px;
+    }
+    #base-inv-close {
+      display: block;
+      width: 100%;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px;
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: background 0.15s;
+    }
+    #base-inv-close:hover { background: rgba(255,255,255,0.14); }
+    #base-store-toast {
+      position: absolute;
+      bottom: 200px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(5,150,105,0.88);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 8px 20px;
+      border-radius: 22px;
+      border: 1px solid rgba(110,231,183,0.35);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.35s;
+      z-index: 35;
+      white-space: nowrap;
+    }
+    #base-store-toast.show { opacity: 1; }
     #survival-hint {
       display: none;
       position: absolute;
@@ -1103,7 +1201,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09o · drill-directional</span>
+      <span class="footer-version">build 2026-08-09p · base-inventory</span>
     </div>
   </div>
 
@@ -1227,6 +1325,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     <button id="survival-exit-btn" onclick="exitSurvivalMode()">🏗 組立へ</button>
     <button id="wb-build-toggle-btn" onclick="toggleWorldBuildMode()">🧱 建設</button>
     <button id="survival-recover-btn" onclick="recoverVehicle()">↩ 回復</button>
+    <button id="base-range-btn" onclick="openBaseInventory()">🏪 拠点</button>
     <div class="survival-badge" id="badge-flip">
       <div class="survival-num" id="flip-countdown">3</div>
       <div class="survival-badge-label">転倒 自動回復</div>
@@ -1252,6 +1351,26 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
   </div>
   <div id="pickup-toast"></div>
+  <div id="base-store-toast"></div>
+
+  <!-- 拠点インベントリパネル -->
+  <div id="base-inv-panel">
+    <div id="base-inv-title">🏪 拠点ストレージ</div>
+    <div id="base-inv-grid">
+      <div class="base-inv-cell">
+        <div class="base-inv-icon">🪨</div>
+        <div class="base-inv-name">石材</div>
+        <div class="base-inv-count" id="base-stone">0</div>
+      </div>
+      <div class="base-inv-cell">
+        <div class="base-inv-icon">🪵</div>
+        <div class="base-inv-name">木材</div>
+        <div class="base-inv-count" id="base-wood">0</div>
+      </div>
+    </div>
+    <div id="base-inv-total">合計 <span id="base-total">0</span> 個</div>
+    <button id="base-inv-close" onclick="closeBaseInventory()">✕ 閉じる</button>
+  </div>
 
   <!-- サバイバルモード カメラ操作ヒント -->
   <div id="survival-hint">⚔ サバイバルモード ｜ 右スワイプ: カメラ回転</div>
@@ -1489,6 +1608,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let chassisBody    = null;
     let rayVehicle     = null;
     let wheelInfosMeta = []; // { isRear, group, origRotY, ax, az } per physics wheel
+
+    // ===== 拠点インベントリ =====
+    // スポーン店舗の中心座標（buildSpawnShop: BX=8, BZ=8, 9×7）
+    const BASE_POS   = { x: 12.5, z: 11.0 };
+    const BASE_RANGE = 12.0; // 自動収納 & ボタン表示半径
+    const baseInventory = { stone: 0, wood: 0 };
+    let _inBaseRange      = false;
+    let _baseStoreTimer   = 0;
 
     // ===== インベントリ / ドリル / 採掘 =====
     const COCKPIT_CARGO = { cockpit1x1: 5, cockpit2x2: 10, cockpit2x3: 15, cockpit2x4: 20 };
@@ -3298,6 +3425,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (worldBlockMap.size === 0) loadWorldBlocks();
       buildSpawnShop();
       loadDestroyedTerrain();
+      loadBaseInventory();
+      updateBaseInventoryUI();
+      document.getElementById('base-range-btn').style.display = 'none';
       showWorldChunks(true);
       buildVehiclePhysics();
 
@@ -3351,6 +3481,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       saveWorldBlocks();
       saveDestroyedTerrain();
       clearDroppedItems();
+      document.getElementById('base-range-btn').style.display = 'none';
+      closeBaseInventory();
+      _inBaseRange = false;
       showWorldChunks(false);
 
       // ワールド復元（workshopモードでは床・グリッドは非表示のまま）
@@ -4145,6 +4278,68 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       droppedItems.length = 0;
     }
 
+    // ===== 拠点インベントリ =====
+    function checkBaseRange() {
+      const vx = vehicleState.pos.x, vz = vehicleState.pos.z;
+      const dx = vx - BASE_POS.x, dz = vz - BASE_POS.z;
+      const inRange = dx*dx + dz*dz < BASE_RANGE * BASE_RANGE;
+
+      document.getElementById('base-range-btn').style.display = inRange ? '' : 'none';
+
+      if (inRange && !_inBaseRange) {
+        // 範囲に入った瞬間に自動収納
+        autoStoreToBase();
+      }
+      _inBaseRange = inRange;
+    }
+
+    function autoStoreToBase() {
+      const s = inventory.stone, w = inventory.wood;
+      if (s === 0 && w === 0) return;
+      baseInventory.stone += s;
+      baseInventory.wood  += w;
+      inventory.stone = 0;
+      inventory.wood  = 0;
+      updateInventoryHUD();
+      updateBaseInventoryUI();
+      saveBaseInventory();
+      // 収納トースト
+      const el = document.getElementById('base-store-toast');
+      const parts = [];
+      if (s > 0) parts.push(`🪨${s}`);
+      if (w > 0) parts.push(`🪵${w}`);
+      el.textContent = `🏪 拠点に収納: ${parts.join(' ')}`;
+      el.classList.add('show');
+      clearTimeout(_baseStoreTimer);
+      _baseStoreTimer = setTimeout(() => el.classList.remove('show'), 2500);
+    }
+
+    function openBaseInventory() {
+      updateBaseInventoryUI();
+      document.getElementById('base-inv-panel').style.display = '';
+    }
+
+    function closeBaseInventory() {
+      document.getElementById('base-inv-panel').style.display = 'none';
+    }
+
+    function updateBaseInventoryUI() {
+      document.getElementById('base-stone').textContent = baseInventory.stone;
+      document.getElementById('base-wood').textContent  = baseInventory.wood;
+      document.getElementById('base-total').textContent = baseInventory.stone + baseInventory.wood;
+    }
+
+    function saveBaseInventory() {
+      try { localStorage.setItem('blockcraft_base_inv', JSON.stringify(baseInventory)); } catch(e) {}
+    }
+
+    function loadBaseInventory() {
+      try {
+        const raw = localStorage.getItem('blockcraft_base_inv');
+        if (raw) { const d = JSON.parse(raw); baseInventory.stone = d.stone||0; baseInventory.wood = d.wood||0; }
+      } catch(e) {}
+    }
+
     function _updateTerrainChunks(px, pz) {
       const cx = Math.floor(px / TC_SIZE);
       const cz = Math.floor(pz / TC_SIZE);
@@ -4647,6 +4842,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       updateVehicleTransform();
       checkPickup();
       checkDrill(dt);
+      checkBaseRange();
       _updateTerrainChunks(vehicleState.pos.x, vehicleState.pos.z);
       updateSurvivalCamera();
       updateBiomeAtmosphere(vehicleState.pos.x, vehicleState.pos.z);
