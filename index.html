@@ -1201,7 +1201,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09p · base-inventory</span>
+      <span class="footer-version">build 2026-08-09q · preview-shapes</span>
     </div>
   </div>
 
@@ -2275,10 +2275,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function createPreviewMesh() {
       if (currentBlockType === 'wheel') return createWheelPreviewMesh(currentRotation);
+      if (isLargeWheelType(currentBlockType)) return createLargeWheelPreviewMesh(currentBlockType, currentRotation);
       if (isCylinderType(currentBlockType)) {
         return createCylinderPreviewMesh(currentBlockType, activeTilt);
       }
       if (currentBlockType === 'connector') return createConnectorPreviewMesh(currentRotation);
+      if (currentBlockType === 'drill') return createDrillPreviewMesh(currentRotation);
       if (isCockpitType(currentBlockType)) return createCockpitPreviewMesh(currentBlockType, currentRotation);
       const dim = getBlockDimensions(currentBlockType, currentRotation);
       const geo = new THREE.BoxGeometry(dim.w - 0.02, dim.h - 0.02, dim.d - 0.02);
@@ -2379,6 +2381,100 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         }
       };
 
+      return group;
+    }
+
+    function createLargeWheelPreviewMesh(type, rot) {
+      const mkMat = () => new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.45 });
+      const group = new THREE.Group();
+      const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
+      let axleX = 0, axleZ = 0;
+      if      (rotSteps === 0) axleX =  1;
+      else if (rotSteps === 1) axleZ =  1;
+      else if (rotSteps === 2) axleX = -1;
+      else                     axleZ = -1;
+
+      let R, tubeR, hubR, rimH;
+      if      (type === 'wheel3')   { R = 0.99; tubeR = 0.42; hubR = 0.50; rimH = 0.40; }
+      else if (type === 'wheel5')   { R = 2.00; tubeR = 0.47; hubR = 1.40; rimH = 0.42; }
+      else                          { R = 1.60; tubeR = 0.87; hubR = 0.60; rimH = 0.80; }
+      const tireOffset = type === 'wheel5t2' ? 2 : 1;
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.99, 0.99, 0.99), mkMat());
+      body.position.set(0, 0.5, 0);
+      group.add(body);
+
+      const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, tireOffset, 8), mkMat());
+      axle.position.set(axleX * tireOffset / 2, 0.5, axleZ * tireOffset / 2);
+      if (axleX !== 0) axle.rotation.z = Math.PI / 2;
+      else             axle.rotation.x = Math.PI / 2;
+      group.add(axle);
+
+      const segs = type === 'wheel3' ? 20 : 32;
+      const tire = new THREE.Mesh(new THREE.TorusGeometry(R, tubeR, 8, segs), mkMat());
+      tire.position.set(axleX * tireOffset, 0.5, axleZ * tireOffset);
+      if (axleX !== 0) tire.rotation.y = Math.PI / 2;
+      group.add(tire);
+
+      const rim = new THREE.Mesh(new THREE.CylinderGeometry(hubR, hubR, rimH, 12), mkMat());
+      rim.position.set(axleX * tireOffset, 0.5, axleZ * tireOffset);
+      if (axleX !== 0) rim.rotation.z = Math.PI / 2;
+      else             rim.rotation.x = Math.PI / 2;
+      group.add(rim);
+
+      if (type === 'wheel5' || type === 'wheel5t2') {
+        const spokeOuter = R - tubeR - 0.05;
+        const spokeInner = 0.2;
+        if (spokeOuter > spokeInner) {
+          const spokeLen = spokeOuter - spokeInner;
+          const tx = axleX * tireOffset, tz = axleZ * tireOffset;
+          for (let i = 0; i < 5; i++) {
+            const angle = (i / 5) * Math.PI * 2;
+            const halfL = spokeInner + spokeLen / 2;
+            const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, spokeLen, 5), mkMat());
+            if (axleX !== 0) {
+              spoke.position.set(tx, 0.5 + Math.sin(angle) * halfL, tz + Math.cos(angle) * halfL);
+              spoke.rotation.x = Math.PI / 2 - angle;
+            } else {
+              spoke.position.set(tx + Math.cos(angle) * halfL, 0.5 + Math.sin(angle) * halfL, tz);
+              spoke.rotation.z = angle - Math.PI / 2;
+            }
+            group.add(spoke);
+          }
+        }
+      }
+
+      group.material = { color: { setHex: hex => group.traverse(c => { if (c.isMesh) c.material.color.setHex(hex); }) } };
+      return group;
+    }
+
+    function createDrillPreviewMesh(rot) {
+      const mkMat = () => new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.45 });
+      const group = new THREE.Group();
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.88, 0.88), mkMat());
+      body.position.set(0.5, 0.5, 0.5);
+      group.add(body);
+
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.18, 0.55, 8), mkMat());
+      shaft.rotation.x = Math.PI / 2;
+      shaft.position.set(0.5, 0.5, 1.22);
+      group.add(shaft);
+
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.38, 8), mkMat());
+      cone.rotation.x = -Math.PI / 2;
+      cone.position.set(0.5, 0.5, 1.68);
+      group.add(cone);
+
+      [1.05, 1.35].forEach(zPos => {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.035, 6, 12), mkMat());
+        ring.rotation.y = Math.PI / 2;
+        ring.position.set(0.5, 0.5, zPos);
+        group.add(ring);
+      });
+
+      group.rotation.y = THREE.MathUtils.degToRad(rot);
+      group.material = { color: { setHex: hex => group.traverse(c => { if (c.isMesh) c.material.color.setHex(hex); }) } };
       return group;
     }
 
