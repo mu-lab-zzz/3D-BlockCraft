@@ -605,6 +605,33 @@
       text-transform: uppercase;
       margin-top: 3px;
     }
+    #badge-inventory { min-width: 88px; }
+    #inv-items {
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.5;
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+    .inv-entry { display: flex; align-items: center; gap: 2px; }
+    #pickup-toast {
+      position: absolute;
+      bottom: 200px;
+      right: 20px;
+      background: rgba(0,0,0,0.75);
+      color: #86efac;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 14px;
+      border-radius: 20px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 25;
+    }
+    #pickup-toast.show { opacity: 1; }
     #survival-hint {
       display: none;
       position: absolute;
@@ -1076,7 +1103,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09m · spawn-shop</span>
+      <span class="footer-version">build 2026-08-09n · drill-inventory</span>
     </div>
   </div>
 
@@ -1216,7 +1243,15 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       <div class="survival-num" id="survival-engine" style="font-size:11px;color:#f87171">-</div>
       <div class="survival-badge-label">物理</div>
     </div>
+    <div class="survival-badge" id="badge-inventory">
+      <div id="inv-items">
+        <span class="inv-entry">🪨<span id="inv-stone">0</span></span>
+        <span class="inv-entry">🪵<span id="inv-wood">0</span></span>
+      </div>
+      <div class="survival-badge-label">荷物 <span id="inv-cap">0/10</span></div>
+    </div>
   </div>
+  <div id="pickup-toast"></div>
 
   <!-- サバイバルモード カメラ操作ヒント -->
   <div id="survival-hint">⚔ サバイバルモード ｜ 右スワイプ: カメラ回転</div>
@@ -1454,6 +1489,16 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let chassisBody    = null;
     let rayVehicle     = null;
     let wheelInfosMeta = []; // { isRear, group, origRotY, ax, az } per physics wheel
+
+    // ===== インベントリ / ドリル / 採掘 =====
+    const COCKPIT_CARGO = { cockpit1x1: 5, cockpit2x2: 10, cockpit2x3: 15, cockpit2x4: 20 };
+    const DRILL_RANGE   = 2.4;  // 破壊検知半径（ブロック単位）
+    const PICKUP_RANGE  = 4.0;  // アイテム自動回収半径
+    let totalCargoCapacity = 10;
+    const inventory        = { stone: 0, wood: 0 };
+    const droppedItems     = [];         // { mesh, type: 'stone'|'wood' }
+    const destroyedTerrain = new Set();  // "cx,cz|rock|i" or "cx,cz|tree|i"
+    let _drillCooldown     = 0;
     let currentSteer   = 0;  // ステアリング補間状態 (rad)
     let _flipTimer     = 0;  // 転倒継続秒数（自動回復カウンター）
     const FLIP_AUTO_DELAY = 3.0; // 転倒後の自動回復までの秒数
@@ -1570,6 +1615,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function getBlockDimensions(type, rot = currentRotation) {
       if (type === 'wheel') return { w: 1, d: 1, h: 1 };
       if (isLargeWheelType(type)) return { w: 1, d: 1, h: 1 };
+      if (type === 'drill') return { w: 1, d: 1, h: 1 };
       if (type === 'cyl' || type === 'cyl05') return { w: 1, d: 1, h: 1 };
       if (type === 'cylp' || type === 'cyl05p') return { w: 1, d: 1, h: 0.5 };
       if (type === 'connector') return { w: 1, d: 1, h: 1 };
@@ -1600,6 +1646,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (type === 'cyl05')   return '細柱';
       if (type === 'cyl05p')  return '細柱薄';
       if (type === 'connector') return '接続面';
+      if (type === 'drill')     return 'ドリル';
       const cylSize = getLargeCylSize(type);
       if (cylSize !== null) return `円柱${cylSize}${type.endsWith('p') ? '薄' : ''}`;
       if (isCockpitType(type)) {
@@ -1686,12 +1733,49 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       return true;
     }
 
+    function createDrillMesh(color, rot) {
+      const group  = new THREE.Group();
+      const matBody = new THREE.MeshStandardMaterial({ color, roughness: 0.25, metalness: 0.65 });
+      const matBit  = new THREE.MeshStandardMaterial({ color: 0xffcc00, roughness: 0.15, metalness: 0.9 });
+
+      // 本体ブロック
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.88, 0.88), matBody);
+      body.position.set(0.5, 0.5, 0.5);
+      body.castShadow = true;
+      group.add(body);
+      // スタッド
+      const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.1, 8), matBody);
+      stud.position.set(0.5, 0.94, 0.5);
+      group.add(stud);
+      // ドリルシャフト（+Z 方向）
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.18, 0.55, 8), matBit);
+      shaft.rotation.x = Math.PI / 2;
+      shaft.position.set(0.5, 0.5, 1.22);
+      group.add(shaft);
+      // ドリル先端コーン
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.38, 8), matBit);
+      cone.rotation.x = -Math.PI / 2;
+      cone.position.set(0.5, 0.5, 1.68);
+      group.add(cone);
+      // 溝リング×2
+      [1.05, 1.35].forEach(zPos => {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.035, 6, 12), matBody);
+        ring.rotation.y = Math.PI / 2;
+        ring.position.set(0.5, 0.5, zPos);
+        group.add(ring);
+      });
+
+      group.rotation.y = THREE.MathUtils.degToRad(rot);
+      return group;
+    }
+
     function createBlockMesh(type, color, rot, tilt) {
       let group;
       if (type === 'wheel')          group = createWheelMesh(color, rot);
       else if (isLargeWheelType(type)) group = createLargeWheelMesh(type, color, rot);
       else if (isCylinderType(type)) group = createCylinderMesh(type, color, tilt);
       else if (type === 'connector') group = createConnectorMesh(color, rot);
+      else if (type === 'drill')     group = createDrillMesh(color, rot);
       else if (isCockpitType(type))  group = createCockpitMesh(type, color, rot);
       else {
         const dim = getBlockDimensions(type, rot);
@@ -2917,9 +3001,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       ].map(([type, label]) => ({ type, label })));
 
       // その他
-      // その他
       addSection('⚙ その他', [
         { type: 'connector', label: '接続面', title: '回転で接続面の向きを変更' },
+        { type: 'drill',     label: 'ドリル', title: 'サバイバルで岩・木を破壊。前面に向けて配置' },
       ]);
     }
 
@@ -3213,8 +3297,19 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       });
       if (worldBlockMap.size === 0) loadWorldBlocks();
       buildSpawnShop();
+      loadDestroyedTerrain();
       showWorldChunks(true);
       buildVehiclePhysics();
+
+      // コクピット積載量を集計
+      totalCargoCapacity = 0;
+      blocksHistory.forEach(h => {
+        if (isCockpitType(h.type)) totalCargoCapacity += (COCKPIT_CARGO[h.type] || 10);
+      });
+      if (totalCargoCapacity === 0) totalCargoCapacity = 10;
+      // インベントリ/HUD 初期化
+      inventory.stone = 0; inventory.wood = 0;
+      updateInventoryHUD();
 
       // 物理エンジン動作状態を HUD に表示（ON=cannon-es / OFF=キネマティック）
       const engEl = document.getElementById('survival-engine');
@@ -3254,6 +3349,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       // WB モード終了
       if (worldBuildMode) exitWorldBuildMode();
       saveWorldBlocks();
+      saveDestroyedTerrain();
+      clearDroppedItems();
       showWorldChunks(false);
 
       // ワールド復元（workshopモードでは床・グリッドは非表示のまま）
@@ -3769,26 +3866,44 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       iRock.count = 0;
       iRock.visible = (gameMode === 'survival');
       scene.add(iRock); objects.push(iRock);
+      const rockPositions  = [];
+      const rockPhysBodies = [];
+      const _chunkKey      = _tcKey(cx, cz);
+      const _zeroM4 = new THREE.Matrix4().makeScale(0, 0, 0);
       for (let i = 0; i < 60 && iRock.count < RMAX; i++) {
         const wx = ox + rngR()*TC_SIZE, wz2 = oz + rngR()*TC_SIZE;
         const wy = getTerrainHeight(wx, wz2);
         const s = 0.4+rngR()*2.6, sx=1+rngR()*0.6, sy=0.45+rngR()*0.75, sz=1+rngR()*0.6;
+        const ridx = iRock.count;
         dummy.position.set(wx, wy+s*sy*0.55, wz2);
         dummy.rotation.set(rngR()*Math.PI, rngR()*Math.PI, rngR()*Math.PI);
         dummy.scale.set(sx*s, sy*s, sz*s);
         dummy.updateMatrix();
-        iRock.setMatrixAt(iRock.count++, dummy.matrix);
-        if (physicsWorld) {
-          const rb = new CANNON.Body({ mass: 0 });
-          rb.addShape(new CANNON.Box(new CANNON.Vec3(s*sx*0.7, s*sy*0.5, s*sz*0.7)));
-          rb.position.set(wx, wy+s*sy*0.55, wz2);
-          physicsWorld.addBody(rb);
-          physicsBodies.push(rb);
+        rockPositions.push({ wx, wy: wy + s*sy*0.55, wz: wz2 });
+        if (destroyedTerrain.has(`${_chunkKey}|rock|${ridx}`)) {
+          iRock.setMatrixAt(ridx, _zeroM4);
+          iRock.count++;
+          rockPhysBodies.push(null);
+        } else {
+          iRock.setMatrixAt(ridx, dummy.matrix);
+          iRock.count++;
+          if (physicsWorld) {
+            const rb = new CANNON.Body({ mass: 0 });
+            rb.addShape(new CANNON.Box(new CANNON.Vec3(s*sx*0.7, s*sy*0.5, s*sz*0.7)));
+            rb.position.set(wx, wy+s*sy*0.55, wz2);
+            physicsWorld.addBody(rb);
+            physicsBodies.push(rb);
+            rockPhysBodies.push(rb);
+          } else {
+            rockPhysBodies.push(null);
+          }
         }
       }
       iRock.instanceMatrix.needsUpdate = true;
 
       // 木
+      const treeMeshes   = [];
+      const treePositions = [];
       for (let i = 0; i < 20; i++) {
         const wx = ox+rngT()*TC_SIZE, wz2 = oz+rngT()*TC_SIZE;
         const bw2 = _biomeWeights(wx, wz2);
@@ -3810,8 +3925,13 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           }
         } else { rngT(); rngT(); rngT(); }
         g.position.set(wx, wy, wz2);
-        g.visible = (gameMode === 'survival');
-        scene.add(g); objects.push(g);
+        const tidx = treeMeshes.length;
+        const treeAlive = !destroyedTerrain.has(`${_chunkKey}|tree|${tidx}`);
+        g.visible = treeAlive && (gameMode === 'survival');
+        scene.add(g);
+        objects.push(g);
+        treeMeshes.push(g);
+        treePositions.push({ wx, wy, wz: wz2 });
       }
 
       // サボテン
@@ -3835,7 +3955,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         scene.add(iCactus); objects.push(iCactus);
       }
 
-      terrainChunkMap.set(_tcKey(cx,cz), { mesh, physicsBody, objects, physicsBodies });
+      terrainChunkMap.set(_tcKey(cx,cz), {
+        mesh, physicsBody, objects, physicsBodies,
+        rockMesh: iRock, rockPositions, rockPhysBodies,
+        treeMeshes, treePositions,
+      });
     }
 
     function _unloadTerrainChunk(cx, cz) {
@@ -3845,13 +3969,163 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       scene.remove(chunk.mesh);
       chunk.mesh.geometry.dispose();
       if (chunk.physicsBody && physicsWorld) physicsWorld.removeBody(chunk.physicsBody);
-      chunk.physicsBodies.forEach(b => { if (physicsWorld) physicsWorld.removeBody(b); });
+      chunk.physicsBodies.forEach(b => { if (b && physicsWorld) { try { physicsWorld.removeBody(b); } catch(e) {} } });
       chunk.objects.forEach(obj => {
         scene.remove(obj);
         if (obj.geometry) obj.geometry.dispose();
         if (obj.traverse) obj.traverse(child => { if (child.geometry) child.geometry.dispose(); });
       });
       terrainChunkMap.delete(key);
+    }
+
+    // ===== 採掘: 地形オブジェクト破壊 =====
+    let _pickupToastTimer = 0;
+    function destroyTerrainObject(chunkKey, type, idx) {
+      const dkey = `${chunkKey}|${type}|${idx}`;
+      if (destroyedTerrain.has(dkey)) return;
+      destroyedTerrain.add(dkey);
+      const chunk = terrainChunkMap.get(chunkKey);
+      if (!chunk) return;
+      if (type === 'rock') {
+        if (chunk.rockMesh) {
+          chunk.rockMesh.setMatrixAt(idx, new THREE.Matrix4().makeScale(0, 0, 0));
+          chunk.rockMesh.instanceMatrix.needsUpdate = true;
+        }
+        const rb = chunk.rockPhysBodies && chunk.rockPhysBodies[idx];
+        if (rb && physicsWorld) {
+          try { physicsWorld.removeBody(rb); } catch(e) {}
+          chunk.rockPhysBodies[idx] = null;
+          const pi = chunk.physicsBodies.indexOf(rb);
+          if (pi >= 0) chunk.physicsBodies[pi] = null;
+        }
+        const p = chunk.rockPositions && chunk.rockPositions[idx];
+        if (p) spawnDroppedItem('stone', p.wx, p.wy, p.wz);
+      } else if (type === 'tree') {
+        const g = chunk.treeMeshes && chunk.treeMeshes[idx];
+        if (g) g.visible = false;
+        const p = chunk.treePositions && chunk.treePositions[idx];
+        if (p) spawnDroppedItem('wood', p.wx, p.wy, p.wz);
+      }
+    }
+
+    function spawnDroppedItem(itemType, wx, wy, wz) {
+      const color = itemType === 'stone' ? 0x9a9a9a : 0x8b5e3c;
+      const mat   = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+      const geo   = itemType === 'stone'
+        ? new THREE.DodecahedronGeometry(0.28, 0)
+        : new THREE.BoxGeometry(0.32, 0.22, 0.42);
+      const mesh  = new THREE.Mesh(geo, mat);
+      mesh.position.set(wx, wy + 0.5, wz);
+      mesh.castShadow = true;
+      scene.add(mesh);
+      droppedItems.push({ mesh, type: itemType });
+    }
+
+    function checkPickup() {
+      if (!droppedItems.length) return;
+      const total = inventory.stone + inventory.wood;
+      if (total >= totalCargoCapacity) return;
+      const vx = vehicleState.pos.x, vy = vehicleState.pos.y, vz = vehicleState.pos.z;
+      let picked = 0;
+      for (let i = droppedItems.length - 1; i >= 0; i--) {
+        if (inventory.stone + inventory.wood >= totalCargoCapacity) break;
+        const item = droppedItems[i];
+        const mp = item.mesh.position;
+        const dx = mp.x - vx, dy = mp.y - vy, dz = mp.z - vz;
+        if (dx*dx + dy*dy*0.25 + dz*dz < PICKUP_RANGE * PICKUP_RANGE) {
+          inventory[item.type]++;
+          scene.remove(item.mesh);
+          item.mesh.geometry.dispose();
+          droppedItems.splice(i, 1);
+          picked++;
+        }
+      }
+      if (picked > 0) {
+        updateInventoryHUD();
+        showPickupToast(picked);
+      }
+    }
+
+    function showPickupToast(count) {
+      const el = document.getElementById('pickup-toast');
+      const total = inventory.stone + inventory.wood;
+      el.textContent = `+${count} 回収 (${total}/${totalCargoCapacity})`;
+      el.classList.add('show');
+      clearTimeout(_pickupToastTimer);
+      _pickupToastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+    }
+
+    function checkDrill(dt) {
+      _drillCooldown -= dt;
+      if (_drillCooldown > 0) return;
+      _drillCooldown = 0.12; // 約8回/秒チェック
+
+      const drillBlocks = blocksHistory.filter(h => h.type === 'drill');
+      if (!drillBlocks.length) return;
+      const spd = chassisBody
+        ? Math.hypot(chassisBody.velocity.x, chassisBody.velocity.z)
+        : Math.abs(vehicleState.speed);
+      if (spd < 0.6) return;
+
+      const vx = vehicleState.pos.x, vz = vehicleState.pos.z;
+      const pcx = Math.floor(vx / TC_SIZE), pcz = Math.floor(vz / TC_SIZE);
+      const R2 = DRILL_RANGE * DRILL_RANGE;
+
+      for (const [chunkKey, chunk] of terrainChunkMap) {
+        const [kcx, kcz] = chunkKey.split(',').map(Number);
+        if (Math.abs(kcx - pcx) > 1 || Math.abs(kcz - pcz) > 1) continue;
+
+        if (chunk.rockPositions) {
+          for (let i = 0; i < chunk.rockPositions.length; i++) {
+            if (destroyedTerrain.has(`${chunkKey}|rock|${i}`)) continue;
+            const rp = chunk.rockPositions[i];
+            for (const db of drillBlocks) {
+              const dp = db.group.position;
+              const dx = (dp.x + 0.5) - rp.wx, dz = (dp.z + 0.5) - rp.wz;
+              if (dx*dx + dz*dz < R2) { destroyTerrainObject(chunkKey, 'rock', i); break; }
+            }
+          }
+        }
+        if (chunk.treePositions) {
+          for (let i = 0; i < chunk.treePositions.length; i++) {
+            if (destroyedTerrain.has(`${chunkKey}|tree|${i}`)) continue;
+            const tp = chunk.treePositions[i];
+            for (const db of drillBlocks) {
+              const dp = db.group.position;
+              const dx = (dp.x + 0.5) - tp.wx, dz = (dp.z + 0.5) - tp.wz;
+              if (dx*dx + dz*dz < R2) { destroyTerrainObject(chunkKey, 'tree', i); break; }
+            }
+          }
+        }
+      }
+    }
+
+    function updateInventoryHUD() {
+      document.getElementById('inv-stone').textContent = inventory.stone;
+      document.getElementById('inv-wood').textContent  = inventory.wood;
+      const total = inventory.stone + inventory.wood;
+      document.getElementById('inv-cap').textContent = `${total}/${totalCargoCapacity}`;
+    }
+
+    function saveDestroyedTerrain() {
+      try { localStorage.setItem('blockcraft_destroyed', JSON.stringify([...destroyedTerrain])); } catch(e) {}
+    }
+
+    function loadDestroyedTerrain() {
+      try {
+        const raw = localStorage.getItem('blockcraft_destroyed');
+        if (raw) JSON.parse(raw).forEach(k => destroyedTerrain.add(k));
+      } catch(e) {}
+    }
+
+    function clearDestroyedTerrain() {
+      destroyedTerrain.clear();
+      localStorage.removeItem('blockcraft_destroyed');
+    }
+
+    function clearDroppedItems() {
+      droppedItems.forEach(item => { scene.remove(item.mesh); if (item.mesh.geometry) item.mesh.geometry.dispose(); });
+      droppedItems.length = 0;
     }
 
     function _updateTerrainChunks(px, pz) {
@@ -4354,6 +4628,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
 
       updateVehicleTransform();
+      checkPickup();
+      checkDrill(dt);
       _updateTerrainChunks(vehicleState.pos.x, vehicleState.pos.z);
       updateSurvivalCamera();
       updateBiomeAtmosphere(vehicleState.pos.x, vehicleState.pos.z);
@@ -4730,6 +5006,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function survivalNewGame() {
       localStorage.removeItem('block_craft_survival');
+      clearDestroyedTerrain();
+      clearDroppedItems();
       _launchSurvivalWorkshop(() => spawnWorkshopCockpit());
     }
 
