@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09g · wheel-auto-snap</span>
+      <span class="footer-version">build 2026-08-09h · wheel-center-align</span>
     </div>
   </div>
 
@@ -2713,10 +2713,19 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
                 rawHY = Math.round(hitGrp.position.y * 2);
               }
 
-              // タイヤ種別 × 側面ヒット: Y を対象ブロック中心に自動スナップ & 向きを自動設定
+              // タイヤ種別 × 側面ヒット: ホイール中心を対象ブロック中心に自動スナップ & 向きを自動設定
               if ((currentBlockType === 'wheel' || isLargeWheelType(currentBlockType))
                   && Math.abs(norm.y) < 0.5 && hitGrp) {
-                rawHY = Math.round(hitGrp.position.y * 2);
+                const _bbox = new THREE.Box3().setFromObject(hitGrp);
+                const _hitCenterY = (_bbox.min.y + _bbox.max.y) / 2;
+                if (isLargeWheelType(currentBlockType)) {
+                  const _D = getLargeWheelSpec(currentBlockType).diameter;
+                  // wheel center(world) = rawHY*0.5 + D/2 → _hitCenterY
+                  rawHY = Math.round(2 * _hitCenterY - _D);
+                } else {
+                  // 小ホイール: center = rawHY*0.5 + 0.5 → _hitCenterY
+                  rawHY = Math.round(2 * _hitCenterY - 1);
+                }
                 let autoRot = 0;
                 if      (norm.x >  0.5) autoRot = 0;
                 else if (norm.x < -0.5) autoRot = 180;
