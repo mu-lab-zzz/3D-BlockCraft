@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09a · swipe-camera</span>
+      <span class="footer-version">build 2026-08-09b · underside-view</span>
     </div>
   </div>
 
@@ -2425,13 +2425,13 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         // WB モード: orbit カメラ回転（survivalCamTheta/Phi）
         if (!survivalPinching) {
           survivalCamTheta -= dx * 0.005;
-          survivalCamPhi = Math.max(0.15, Math.min(Math.PI * 0.62, survivalCamPhi + dy * 0.005));
+          survivalCamPhi = Math.max(0.05, Math.min(Math.PI * 0.95, survivalCamPhi + dy * 0.005));
         }
       } else {
         // 通常サバイバル: ピンチ中はカメラ回転をスキップ
         if (!survivalPinching) {
           survivalCamTheta -= dx * 0.005;
-          survivalCamPhi = Math.max(0.15, Math.min(Math.PI * 0.62, survivalCamPhi + dy * 0.005));
+          survivalCamPhi = Math.max(0.05, Math.min(Math.PI * 0.95, survivalCamPhi + dy * 0.005));
         }
       }
     });
@@ -2540,22 +2540,19 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
       // 1本指操作（視点パッド操作中でない場合）
       else if (activeTouches.size === 1 && !isJoystickActive) {
-        if (previewMesh.visible) {
-          // 設置位置選択中: レイキャスト更新のみ（カメラ回転なし）
-          mouseVector.x = (e.clientX / window.innerWidth) * 2 - 1;
-          mouseVector.y = -(e.clientY / window.innerHeight) * 2 + 1;
-        } else {
-          // 設置していない時: 1本指スワイプでカメラ orbit 回転
-          if (_buildTouchLastX !== null) {
-            const dx = e.clientX - _buildTouchLastX;
-            const dy = e.clientY - _buildTouchLastY;
-            cameraTheta -= dx * 0.005;
-            cameraPhi = Math.max(0.1, Math.min(Math.PI * 0.49, cameraPhi + dy * 0.005));
-            updateCameraPosition();
-          }
-          _buildTouchLastX = e.clientX;
-          _buildTouchLastY = e.clientY;
+        // 常にレイキャスト座標を更新（設置プレビューを出現させるため）
+        mouseVector.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouseVector.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        // プレビューが出ていない時だけカメラ orbit 回転
+        if (!previewMesh.visible && _buildTouchLastX !== null) {
+          const dx = e.clientX - _buildTouchLastX;
+          const dy = e.clientY - _buildTouchLastY;
+          cameraTheta -= dx * 0.005;
+          cameraPhi = Math.max(0.05, Math.min(Math.PI * 0.95, cameraPhi + dy * 0.005));
+          updateCameraPosition();
         }
+        _buildTouchLastX = e.clientX;
+        _buildTouchLastY = e.clientY;
       }
     });
 
