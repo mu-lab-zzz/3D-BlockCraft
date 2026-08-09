@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-08h · lateral-assembly</span>
+      <span class="footer-version">build 2026-08-08i · delete-highlight</span>
     </div>
   </div>
 
@@ -1537,6 +1537,30 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let isCanPlace = false;
     let targetOccupiedCells = [];
     let hoveredGroup = null;
+
+    // 削除ハイライト（オレンジ明滅）
+    let _deleteHLGroup = null;
+    const _deleteHLEntries = []; // {mesh, savedMat}
+
+    function _clearDeleteHL() {
+      for (const { mesh, savedMat } of _deleteHLEntries) mesh.material = savedMat;
+      _deleteHLEntries.length = 0;
+      _deleteHLGroup = null;
+    }
+
+    function _applyDeleteHL(group) {
+      if (_deleteHLGroup === group) return;
+      _clearDeleteHL();
+      _deleteHLGroup = group;
+      group.traverse(c => {
+        if (!c.isMesh) return;
+        _deleteHLEntries.push({ mesh: c, savedMat: c.material });
+        c.material = new THREE.MeshStandardMaterial({
+          color: 0xff6600, emissive: new THREE.Color(0xff4400), emissiveIntensity: 0.5,
+          roughness: 0.4, side: THREE.DoubleSide, transparent: true, opacity: 0.9
+        });
+      });
+    }
 
     const raycaster = new THREE.Raycaster();
     const mouseVector = new THREE.Vector2(-999, -999); // スワイプ検知座標
@@ -2676,21 +2700,21 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           previewMesh.visible = true;
         }
         else if (mode === 'delete') {
-          if (activeTilt !== null) { activeTilt = null; }
+          if (activeTilt !== null) activeTilt = null;
+          previewMesh.visible = false;
           if (hit.object !== plane) {
             hoveredGroup = hit.object.userData.rootGroup;
-            previewMesh.position.copy(hoveredGroup.position);
-            previewMesh.material.color.setHex(0xff0000);
-            previewMesh.visible = true;
+            _applyDeleteHL(hoveredGroup);
           } else {
             hoveredGroup = null;
-            previewMesh.visible = false;
+            _clearDeleteHL();
           }
         }
       } else {
         if (activeTilt !== null) { activeTilt = null; updatePreviewMesh(); }
         previewMesh.visible = false;
         hoveredGroup = null;
+        _clearDeleteHL();
       }
     }
 
@@ -2742,6 +2766,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const actionIcon = document.getElementById('action-icon');
       const actionText = document.getElementById('action-text');
 
+      if (m === 'add') _clearDeleteHL();
       const deleteBtn = document.getElementById('btn-delete');
       if (mode === 'add') {
         modeBtn.classList.remove('delete-mode');
@@ -2982,6 +3007,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const hIdx = blocksHistory.findIndex(h => h.group === hoveredGroup);
         if (hIdx > -1) blocksHistory.splice(hIdx, 1);
 
+        _clearDeleteHL();
         hoveredGroup = null;
         previewMesh.visible = false;
 
@@ -4542,6 +4568,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       hoveredGroup.traverse(c => { const i = blockMeshes.indexOf(c); if (i > -1) blockMeshes.splice(i,1); });
       const hi = blocksHistory.findIndex(h => h.group === hoveredGroup);
       if (hi > -1) blocksHistory.splice(hi, 1);
+      _clearDeleteHL();
       hoveredGroup = null; previewMesh.visible = false;
       playSound('delete'); triggerVibrate(); updateBlockCount(); autoSave();
     }
@@ -4861,6 +4888,19 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function animate(now = 0) {
       requestAnimationFrame(animate);
+
+      // 削除ハイライト明滅アニメーション
+      if (_deleteHLGroup && _deleteHLEntries.length > 0) {
+        const t = (Math.sin(now * 0.007) + 1) * 0.5; // 0→1 を約900ms周期で
+        const intensity = 0.25 + t * 0.75;
+        const opacity   = 0.55 + t * 0.45;
+        for (const { mesh } of _deleteHLEntries) {
+          if (mesh.material) {
+            mesh.material.emissiveIntensity = intensity;
+            mesh.material.opacity = opacity;
+          }
+        }
+      }
 
       if (gameMode === 'build') {
         if (isJoystickActive) {
