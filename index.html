@@ -1103,7 +1103,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09n · drill-inventory</span>
+      <span class="footer-version">build 2026-08-09o · drill-directional</span>
     </div>
   </div>
 
@@ -4070,6 +4070,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const vx = vehicleState.pos.x, vz = vehicleState.pos.z;
       const pcx = Math.floor(vx / TC_SIZE), pcz = Math.floor(vz / TC_SIZE);
       const R2 = DRILL_RANGE * DRILL_RANGE;
+      const COS45 = Math.cos(Math.PI / 4); // ±45° コーン
+
+      // ドリルごとにワールド向きベクトルを事前計算（ローカル前方 = +Z）
+      const drillInfos = drillBlocks.map(db => {
+        const dp  = db.group.position;
+        const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(db.group.quaternion);
+        return { cx: dp.x + 0.5, cz: dp.z + 0.5, fx: fwd.x, fz: fwd.z };
+      });
 
       for (const [chunkKey, chunk] of terrainChunkMap) {
         const [kcx, kcz] = chunkKey.split(',').map(Number);
@@ -4079,10 +4087,15 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           for (let i = 0; i < chunk.rockPositions.length; i++) {
             if (destroyedTerrain.has(`${chunkKey}|rock|${i}`)) continue;
             const rp = chunk.rockPositions[i];
-            for (const db of drillBlocks) {
-              const dp = db.group.position;
-              const dx = (dp.x + 0.5) - rp.wx, dz = (dp.z + 0.5) - rp.wz;
-              if (dx*dx + dz*dz < R2) { destroyTerrainObject(chunkKey, 'rock', i); break; }
+            for (const di of drillInfos) {
+              const dx = rp.wx - di.cx, dz = rp.wz - di.cz;
+              const d2 = dx*dx + dz*dz;
+              if (d2 > R2) continue;
+              const d = Math.sqrt(d2);
+              // 真横付き(d≈0)は常に破壊、それ以外は前方コーン判定
+              if (d < 0.3 || (dx/d) * di.fx + (dz/d) * di.fz >= COS45) {
+                destroyTerrainObject(chunkKey, 'rock', i); break;
+              }
             }
           }
         }
@@ -4090,10 +4103,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           for (let i = 0; i < chunk.treePositions.length; i++) {
             if (destroyedTerrain.has(`${chunkKey}|tree|${i}`)) continue;
             const tp = chunk.treePositions[i];
-            for (const db of drillBlocks) {
-              const dp = db.group.position;
-              const dx = (dp.x + 0.5) - tp.wx, dz = (dp.z + 0.5) - tp.wz;
-              if (dx*dx + dz*dz < R2) { destroyTerrainObject(chunkKey, 'tree', i); break; }
+            for (const di of drillInfos) {
+              const dx = tp.wx - di.cx, dz = tp.wz - di.cz;
+              const d2 = dx*dx + dz*dz;
+              if (d2 > R2) continue;
+              const d = Math.sqrt(d2);
+              if (d < 0.3 || (dx/d) * di.fx + (dz/d) * di.fz >= COS45) {
+                destroyTerrainObject(chunkKey, 'tree', i); break;
+              }
             }
           }
         }
