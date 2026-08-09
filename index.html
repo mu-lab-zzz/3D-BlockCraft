@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09d · fix-empty-workshop</span>
+      <span class="footer-version">build 2026-08-09e · snap-offset-y</span>
     </div>
   </div>
 
@@ -2172,7 +2172,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       } else {
         const dim = getBlockDimensions(currentBlockType, currentRotation);
         snapOffsetX = (snapOffsetX + 1) % dim.w;
-        if (snapOffsetX === 0) snapOffsetZ = (snapOffsetZ + 1) % dim.d;
+        if (snapOffsetX === 0) {
+          snapOffsetZ = (snapOffsetZ + 1) % dim.d;
+          // X・Z が一周したら Y も +0.5 ずつ循環（上下方向の位置調整）
+          if (snapOffsetZ === 0) snapOffsetY = (snapOffsetY + 1) % 4;
+        }
       }
       triggerVibrate();
     }
@@ -2691,7 +2695,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
             if (hit.object === plane) {
               originX = Math.floor(hit.point.x - dim.w / 2 + 0.5);
               // ワークショップでは空中組立面に配置（タイヤ下部クリアランス確保）
-              originY = survivalWorkshop ? WORKSHOP_FLOAT_HY : 0;
+              originY = (survivalWorkshop ? WORKSHOP_FLOAT_HY : 0) + snapOffsetY;
               originZ = Math.floor(hit.point.z - dim.d / 2 + 0.5);
             } else {
               const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
@@ -2707,7 +2711,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
               if (hitGrp?.userData?.blockTilt && Math.abs(norm.y) < 0.3) {
                 rawHY = Math.round(hitGrp.position.y * 2);
               }
-              originY = survivalWorkshop ? rawHY : Math.max(0, rawHY);
+              originY = survivalWorkshop ? rawHY + snapOffsetY : Math.max(0, rawHY + snapOffsetY);
               originZ = Math.round(p.z) - snapOffsetZ;
             }
           }
