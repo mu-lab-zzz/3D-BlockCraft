@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09l · picker-reorganize</span>
+      <span class="footer-version">build 2026-08-09m · spawn-shop</span>
     </div>
   </div>
 
@@ -3212,6 +3212,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         c.objects.forEach(o => { o.visible = true; });
       });
       if (worldBlockMap.size === 0) loadWorldBlocks();
+      buildSpawnShop();
       showWorldChunks(true);
       buildVehiclePhysics();
 
@@ -4163,6 +4164,67 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const arr = JSON.parse(raw);
         arr.forEach(({ x, y, z, color }) => placeWorldBlock(x, y, z, color));
       } catch(e) {}
+    }
+
+    function buildSpawnShop() {
+      // 初期スポーン(0,0,0)の北東 (~11ブロック) にある店舗建築
+      // アンカーチェック: 既に建てられていればスキップ
+      const BX = 8, BZ = 8;
+      if (worldBlockMap.has(_wKey(BX, 0, BZ))) return;
+
+      const BROWN    = 0x8b5e3c; // 床・木材
+      const GRAY     = 0xaaaaaa; // 石壁
+      const DGRAY    = 0x555555; // 屋根
+      const ORANGE   = 0xff7700; // 看板ストライプ
+      const BLUE     = 0x3399ff; // 窓
+      const GOLD     = 0xffcc00; // カウンター
+
+      // 幅9(X: BX..BX+8)、奥行7(Z: BZ..BZ+6)、高さ5(Y: 0..4)
+      // 正面はスポーン側 Z=BZ
+
+      // 床 (Y=0)
+      for (let x = BX; x <= BX+8; x++)
+        for (let z = BZ; z <= BZ+6; z++)
+          placeWorldBlock(x, 0, z, BROWN);
+
+      // 正面壁 (Z=BZ, Y=0..3) — ドア穴 X=BX+3,BX+4 Y=0..2
+      for (let x = BX; x <= BX+8; x++) {
+        for (let y = 0; y <= 3; y++) {
+          const isDoor = (x === BX+3 || x === BX+4) && y <= 2;
+          if (isDoor) continue;
+          placeWorldBlock(x, y, BZ, y === 3 ? ORANGE : GRAY);
+        }
+      }
+
+      // 背面壁 (Z=BZ+6, Y=0..3)
+      for (let x = BX; x <= BX+8; x++)
+        for (let y = 0; y <= 3; y++)
+          placeWorldBlock(x, y, BZ+6, GRAY);
+
+      // 側壁 左 (X=BX, Z=BZ+1..BZ+5, Y=0..3) — 窓 Z=BZ+2,BZ+3 Y=1..2
+      for (let z = BZ+1; z <= BZ+5; z++) {
+        for (let y = 0; y <= 3; y++) {
+          const isWin = (z === BZ+2 || z === BZ+3) && (y === 1 || y === 2);
+          placeWorldBlock(BX, y, z, isWin ? BLUE : GRAY);
+        }
+      }
+
+      // 側壁 右 (X=BX+8, Z=BZ+1..BZ+5, Y=0..3) — 窓 Z=BZ+2,BZ+3 Y=1..2
+      for (let z = BZ+1; z <= BZ+5; z++) {
+        for (let y = 0; y <= 3; y++) {
+          const isWin = (z === BZ+2 || z === BZ+3) && (y === 1 || y === 2);
+          placeWorldBlock(BX+8, y, z, isWin ? BLUE : GRAY);
+        }
+      }
+
+      // 屋根 (Y=4)
+      for (let x = BX; x <= BX+8; x++)
+        for (let z = BZ; z <= BZ+6; z++)
+          placeWorldBlock(x, 4, z, DGRAY);
+
+      // カウンター (Y=1, Z=BZ+4, X=BX+1..BX+7)
+      for (let x = BX+1; x <= BX+7; x++)
+        placeWorldBlock(x, 1, BZ+4, GOLD);
     }
 
     function showWorldChunks(visible) {
