@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09e · snap-offset-y</span>
+      <span class="footer-version">build 2026-08-09f · split-offset-btns</span>
     </div>
   </div>
 
@@ -1157,7 +1157,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   <!-- FPS 回転・位置ずらしボタン（配置ボタンの上） -->
   <div id="fps-edit-btns">
     <button class="fps-edit-btn" onclick="rotatePreview()" title="回転">🔄</button>
-    <button class="fps-edit-btn" onclick="shiftSnapOffset()" title="位置ずらし">↔️</button>
+    <button class="fps-edit-btn" onclick="shiftSnapOffset()" title="横方向ずらし">↔️</button>
+    <button class="fps-edit-btn" onclick="shiftSnapOffsetY()" title="上下方向ずらし">↕️</button>
   </div>
 
   <!-- 下降ボタン（飛行中のみ表示） -->
@@ -2166,18 +2167,18 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function shiftSnapOffset() {
-      if (_inLateralMode) {
-        // 接続面モード: Y方向にオフセット（0→0.5→1.0→1.5 worldunit を循環）
-        snapOffsetY = (snapOffsetY + 1) % 4;
-      } else {
+      // ↔️ 横方向ずらし: X/Z のみ循環（接続面モードでは何もしない）
+      if (!_inLateralMode) {
         const dim = getBlockDimensions(currentBlockType, currentRotation);
         snapOffsetX = (snapOffsetX + 1) % dim.w;
-        if (snapOffsetX === 0) {
-          snapOffsetZ = (snapOffsetZ + 1) % dim.d;
-          // X・Z が一周したら Y も +0.5 ずつ循環（上下方向の位置調整）
-          if (snapOffsetZ === 0) snapOffsetY = (snapOffsetY + 1) % 4;
-        }
+        if (snapOffsetX === 0) snapOffsetZ = (snapOffsetZ + 1) % dim.d;
       }
+      triggerVibrate();
+    }
+
+    function shiftSnapOffsetY() {
+      // ↕️ 上下方向ずらし: Y のみ循環（接続面・通常モード共通）
+      snapOffsetY = (snapOffsetY + 1) % 4;
       triggerVibrate();
     }
 
