@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-08f · connector-fix</span>
+      <span class="footer-version">build 2026-08-08g · tilt-chain</span>
     </div>
   </div>
 
@@ -1685,6 +1685,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
       // 全方向からレイキャストできるよう全面を両面描画にする
       group.traverse(c => { if (c.isMesh && c.material) c.material.side = THREE.DoubleSide; });
+      if (tilt) group.userData.blockTilt = tilt;
       return group;
     }
 
@@ -2607,9 +2608,15 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
           // 接続面ヒット検出
           const connFace = detectConnectorFace(intersects);
-          const newTilt = (connFace && isTiltableCylinder(currentBlockType))
+          let newTilt = (connFace && isTiltableCylinder(currentBlockType))
             ? (connFace.axleX !== 0 ? 'z' : 'x')
             : null;
+          // コネクター未検出でも、横倒し円柱の隣に置く場合は同じtiltを引き継ぐ
+          if (!newTilt && isTiltableCylinder(currentBlockType)) {
+            const firstBlockHit = intersects.find(h => h.object !== plane);
+            const hitRootGrp = firstBlockHit?.object?.userData?.rootGroup;
+            if (hitRootGrp?.userData?.blockTilt) newTilt = hitRootGrp.userData.blockTilt;
+          }
           if (newTilt !== activeTilt) {
             activeTilt = newTilt;
             updatePreviewMesh();
@@ -4398,9 +4405,15 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         } else {
           // 接続面ヒット検出
           const connFace = detectConnectorFace(hits);
-          const newTilt = (connFace && isTiltableCylinder(currentBlockType))
+          let newTilt = (connFace && isTiltableCylinder(currentBlockType))
             ? (connFace.axleX !== 0 ? 'z' : 'x')
             : null;
+          // コネクター未検出でも、横倒し円柱の隣に置く場合は同じtiltを引き継ぐ
+          if (!newTilt && isTiltableCylinder(currentBlockType)) {
+            const firstBlockHit = hits.find(h => h.object !== plane);
+            const hitRootGrp = firstBlockHit?.object?.userData?.rootGroup;
+            if (hitRootGrp?.userData?.blockTilt) newTilt = hitRootGrp.userData.blockTilt;
+          }
           if (newTilt !== activeTilt) {
             activeTilt = newTilt;
             updatePreviewMesh();
