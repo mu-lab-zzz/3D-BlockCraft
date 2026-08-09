@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-08g · tilt-chain</span>
+      <span class="footer-version">build 2026-08-08h · lateral-assembly</span>
     </div>
   </div>
 
@@ -1316,7 +1316,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let currentRotation = 0;
     let snapOffsetX = 0;
     let snapOffsetZ = 0;
-    let activeTilt = null; // 'z'|'x'|null  接続面に置くとき設定される
+    let snapOffsetY = 0;        // 接続面モード専用: Y半グリッドオフセット
+    let activeTilt = null;      // 'z'|'x'|null  接続面に置くとき設定される
+    let _inLateralMode = false; // 接続面ホバー中フラグ（↔️ボタンの挙動切替用）
 
     // ===== FPS モード =====
     let gameMode = 'build';
@@ -2140,10 +2142,13 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function shiftSnapOffset() {
-      const dim = getBlockDimensions(currentBlockType, currentRotation);
-      snapOffsetX = (snapOffsetX + 1) % dim.w;
-      if (snapOffsetX === 0) {
-        snapOffsetZ = (snapOffsetZ + 1) % dim.d;
+      if (_inLateralMode) {
+        // 接続面モード: Y方向にオフセット（0→0.5→1.0→1.5 worldunit を循環）
+        snapOffsetY = (snapOffsetY + 1) % 4;
+      } else {
+        const dim = getBlockDimensions(currentBlockType, currentRotation);
+        snapOffsetX = (snapOffsetX + 1) % dim.w;
+        if (snapOffsetX === 0) snapOffsetZ = (snapOffsetZ + 1) % dim.d;
       }
       triggerVibrate();
     }
@@ -2611,11 +2616,17 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           let newTilt = (connFace && isTiltableCylinder(currentBlockType))
             ? (connFace.axleX !== 0 ? 'z' : 'x')
             : null;
-          // コネクター未検出でも、横倒し円柱の隣に置く場合は同じtiltを引き継ぐ
+          // コネクター未検出でも、横倒し円柱の【側面】に置く場合は同じtiltを引き継ぐ
+          // ※上面/下面ヒット(|norm.y|>=0.5)は伝播しない
           if (!newTilt && isTiltableCylinder(currentBlockType)) {
             const firstBlockHit = intersects.find(h => h.object !== plane);
-            const hitRootGrp = firstBlockHit?.object?.userData?.rootGroup;
-            if (hitRootGrp?.userData?.blockTilt) newTilt = hitRootGrp.userData.blockTilt;
+            if (firstBlockHit) {
+              const hitRootGrp = firstBlockHit.object?.userData?.rootGroup;
+              const hitNorm = firstBlockHit.face.normal.clone().transformDirection(firstBlockHit.object.matrixWorld);
+              if (hitRootGrp?.userData?.blockTilt && Math.abs(hitNorm.y) < 0.5) {
+                newTilt = hitRootGrp.userData.blockTilt;
+              }
+            }
           }
           if (newTilt !== activeTilt) {
             activeTilt = newTilt;
@@ -2623,29 +2634,38 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           }
 
           if (connFace) {
-            // 接続面の隣に配置
+            _inLateralMode = true;
+            // 接続面の隣に配置（snapOffsetYでY位置を調整可能）
             const cx = Math.round(connFace.group.position.x);
             const chy = Math.round(connFace.group.position.y * 2);
             const cz = Math.round(connFace.group.position.z);
             originX = cx + connFace.axleX;
-            originY = chy;
+            originY = chy + snapOffsetY;
             originZ = cz + connFace.axleZ;
-          } else if (hit.object === plane) {
-            originX = Math.floor(hit.point.x - dim.w / 2 + 0.5);
-            // ワークショップでは空中組立面に配置（タイヤ下部クリアランス確保）
-            originY = survivalWorkshop ? WORKSHOP_FLOAT_HY : 0;
-            originZ = Math.floor(hit.point.z - dim.d / 2 + 0.5);
           } else {
-            const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
-            const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
-            // floor → round: 多セルブロック(2x2等)の+方向面でセルがずれる問題を修正
-            originX = Math.round(p.x) - snapOffsetX;
-            // 下面ヒット(norm.y < 0)は新ブロック高さ分下にオフセット（重複回避）
-            const hh = Math.round(dim.h * 2);
-            let rawHY = Math.round(hit.point.y * 2);
-            if (norm.y < -0.5) rawHY -= hh;
-            originY = survivalWorkshop ? rawHY : Math.max(0, rawHY);
-            originZ = Math.round(p.z) - snapOffsetZ;
+            _inLateralMode = false;
+            if (hit.object === plane) {
+              originX = Math.floor(hit.point.x - dim.w / 2 + 0.5);
+              // ワークショップでは空中組立面に配置（タイヤ下部クリアランス確保）
+              originY = survivalWorkshop ? WORKSHOP_FLOAT_HY : 0;
+              originZ = Math.floor(hit.point.z - dim.d / 2 + 0.5);
+            } else {
+              const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+              const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
+              // floor → round: 多セルブロック(2x2等)の+方向面でセルがずれる問題を修正
+              originX = Math.round(p.x) - snapOffsetX;
+              // 下面ヒット(norm.y < 0)は新ブロック高さ分下にオフセット（重複回避）
+              const hh = Math.round(dim.h * 2);
+              let rawHY = Math.round(hit.point.y * 2);
+              if (norm.y < -0.5) rawHY -= hh;
+              // 横倒しブロックの側面ヒット時: hit.point.yはバラつくのでブロックのグリッドYに揃える
+              const hitGrp = hit.object?.userData?.rootGroup;
+              if (hitGrp?.userData?.blockTilt && Math.abs(norm.y) < 0.3) {
+                rawHY = Math.round(hitGrp.position.y * 2);
+              }
+              originY = survivalWorkshop ? rawHY : Math.max(0, rawHY);
+              originZ = Math.round(p.z) - snapOffsetZ;
+            }
           }
 
           targetOccupiedCells = getOccupiedCells(originX, originY, originZ, currentBlockType, currentRotation, activeTilt);
@@ -2869,6 +2889,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       currentBlockType = type;
       snapOffsetX = 0;
       snapOffsetZ = 0;
+      snapOffsetY = 0;
       if (!isTiltableCylinder(type)) activeTilt = null;
       document.querySelectorAll('#block-picker .opt-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
@@ -2887,6 +2908,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       currentRotation = (currentRotation + 90) % 360;
       snapOffsetX = 0;
       snapOffsetZ = 0;
+      snapOffsetY = 0;
       updatePreviewMesh();
       triggerVibrate();
     }
@@ -4408,11 +4430,17 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           let newTilt = (connFace && isTiltableCylinder(currentBlockType))
             ? (connFace.axleX !== 0 ? 'z' : 'x')
             : null;
-          // コネクター未検出でも、横倒し円柱の隣に置く場合は同じtiltを引き継ぐ
+          // コネクター未検出でも、横倒し円柱の【側面】に置く場合は同じtiltを引き継ぐ
+          // ※上面/下面ヒット(|norm.y|>=0.5)は伝播しない
           if (!newTilt && isTiltableCylinder(currentBlockType)) {
             const firstBlockHit = hits.find(h => h.object !== plane);
-            const hitRootGrp = firstBlockHit?.object?.userData?.rootGroup;
-            if (hitRootGrp?.userData?.blockTilt) newTilt = hitRootGrp.userData.blockTilt;
+            if (firstBlockHit) {
+              const hitRootGrp = firstBlockHit.object?.userData?.rootGroup;
+              const hitNorm = firstBlockHit.face.normal.clone().transformDirection(firstBlockHit.object.matrixWorld);
+              if (hitRootGrp?.userData?.blockTilt && Math.abs(hitNorm.y) < 0.5) {
+                newTilt = hitRootGrp.userData.blockTilt;
+              }
+            }
           }
           if (newTilt !== activeTilt) {
             activeTilt = newTilt;
@@ -4420,11 +4448,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           }
 
           if (connFace) {
+            _inLateralMode = true;
             const cx = Math.round(connFace.group.position.x);
             const chy = Math.round(connFace.group.position.y * 2);
             const cz = Math.round(connFace.group.position.z);
             const ox = cx + connFace.axleX;
-            const oy = chy;
+            const oy = chy + snapOffsetY;
             const oz = cz + connFace.axleZ;
             targetOccupiedCells = getOccupiedCells(ox, oy, oz, currentBlockType, currentRotation, activeTilt);
             isCanPlace = canPlaceBlock(targetOccupiedCells);
@@ -4437,6 +4466,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
             }
             hoveredGroup = null;
           } else {
+            _inLateralMode = false;
             hoveredGroup = hit.object.userData.rootGroup;
             if (hoveredGroup) {
               const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
@@ -4448,6 +4478,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
               const fpsHH = Math.round(dim.h * 2);
               let oy = Math.round(hit.point.y * 2);
               if (norm.y < -0.5) oy -= fpsHH;
+              // 横倒しブロックの側面ヒット時: hit.point.yはバラつくのでブロックのグリッドYに揃える
+              const hitGrpWB = hit.object?.userData?.rootGroup;
+              if (hitGrpWB?.userData?.blockTilt && Math.abs(norm.y) < 0.3) {
+                oy = Math.round(hitGrpWB.position.y * 2);
+              }
               oy = survivalWorkshop ? oy : Math.max(0, oy);
               let oz = Math.round(p.z) - snapOffsetZ;
 
