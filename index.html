@@ -1076,7 +1076,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09f · split-offset-btns</span>
+      <span class="footer-version">build 2026-08-09g · wheel-auto-snap</span>
     </div>
   </div>
 
@@ -2654,7 +2654,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
       if (intersects.length > 0) {
         const hit = intersects[0];
-        const dim = getBlockDimensions(currentBlockType, currentRotation);
+        let dim = getBlockDimensions(currentBlockType, currentRotation);
 
         if (mode === 'add') {
           hoveredGroup = null;
@@ -2712,6 +2712,23 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
               if (hitGrp?.userData?.blockTilt && Math.abs(norm.y) < 0.3) {
                 rawHY = Math.round(hitGrp.position.y * 2);
               }
+
+              // タイヤ種別 × 側面ヒット: Y を対象ブロック中心に自動スナップ & 向きを自動設定
+              if ((currentBlockType === 'wheel' || isLargeWheelType(currentBlockType))
+                  && Math.abs(norm.y) < 0.5 && hitGrp) {
+                rawHY = Math.round(hitGrp.position.y * 2);
+                let autoRot = 0;
+                if      (norm.x >  0.5) autoRot = 0;
+                else if (norm.x < -0.5) autoRot = 180;
+                else if (norm.z >  0.5) autoRot = 90;
+                else                    autoRot = 270;
+                if (autoRot !== currentRotation) {
+                  currentRotation = autoRot;
+                  updatePreviewMesh();
+                  dim = getBlockDimensions(currentBlockType, currentRotation);
+                }
+              }
+
               originY = survivalWorkshop ? rawHY + snapOffsetY : Math.max(0, rawHY + snapOffsetY);
               originZ = Math.round(p.z) - snapOffsetZ;
             }
