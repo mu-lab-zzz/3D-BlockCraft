@@ -1201,7 +1201,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     </div>
     <div id="opening-footer">
       <span class="footer-tap">Tap to start</span>
-      <span class="footer-version">build 2026-08-09q · preview-shapes</span>
+      <span class="footer-version">build 2026-08-09r · rock-drill-fix</span>
     </div>
   </div>
 
@@ -4108,7 +4108,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         dummy.rotation.set(rngR()*Math.PI, rngR()*Math.PI, rngR()*Math.PI);
         dummy.scale.set(sx*s, sy*s, sz*s);
         dummy.updateMatrix();
-        rockPositions.push({ wx, wy: wy + s*sy*0.55, wz: wz2 });
+        const rr = s * Math.max(sx, sz) * 0.7;
+        rockPositions.push({ wx, wy: wy + s*sy*0.55, wz: wz2, r: rr });
         if (destroyedTerrain.has(`${_chunkKey}|rock|${ridx}`)) {
           iRock.setMatrixAt(ridx, _zeroM4);
           iRock.count++;
@@ -4316,13 +4317,16 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           for (let i = 0; i < chunk.rockPositions.length; i++) {
             if (destroyedTerrain.has(`${chunkKey}|rock|${i}`)) continue;
             const rp = chunk.rockPositions[i];
+            const rockR = rp.r || 0.3;
             for (const di of drillInfos) {
               const dx = rp.wx - di.cx, dz = rp.wz - di.cz;
               const d2 = dx*dx + dz*dz;
-              if (d2 > R2) continue;
+              // 岩は物理ボディが大きいため有効範囲 = DRILL_RANGE + 岩の半径
+              const effR = DRILL_RANGE + rockR;
+              if (d2 > effR * effR) continue;
               const d = Math.sqrt(d2);
-              // 真横付き(d≈0)は常に破壊、それ以外は前方コーン判定
-              if (d < 0.3 || (dx/d) * di.fx + (dz/d) * di.fz >= COS45) {
+              // 岩の内部に入っている場合は方向問わず破壊
+              if (d < rockR || (dx/d) * di.fx + (dz/d) * di.fz >= COS45) {
                 destroyTerrainObject(chunkKey, 'rock', i); break;
               }
             }
