@@ -803,6 +803,19 @@
     }
     .wb-swatch.active { border-color: #fff; transform: scale(1.2); }
     .wb-swatch:active { transform: scale(0.9); }
+    #wb-confirm-btn {
+      background: rgba(59,130,246,0.85);
+      border: 1px solid rgba(147,197,253,0.35);
+      color: #fff;
+      border-radius: 10px;
+      padding: 9px 0;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: background 0.15s, transform 0.1s;
+    }
+    #wb-confirm-btn:active { transform: scale(0.95); }
     #wb-delete-btn {
       background: rgba(239,68,68,0.75);
       border: 1px solid rgba(252,165,165,0.35);
@@ -1376,12 +1389,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   <div id="survival-hint">⚔ サバイバルモード ｜ 右スワイプ: カメラ回転</div>
 
   <!-- ワールドビルドモード クロスヘア -->
-  <div id="wb-crosshair"></div>
-
   <!-- ワールドビルドモード パネル -->
   <div id="wb-panel">
     <div id="wb-panel-title">ワールドブロック</div>
     <div id="wb-swatches"></div>
+    <button id="wb-confirm-btn" onclick="_wbConfirmAction()">✅ 配置</button>
     <button id="wb-delete-btn" onclick="toggleWBDelete()">🗑 削除モード</button>
     <button id="wb-drive-btn" onclick="exitWorldBuildMode()">🚗 走行へ戻る</button>
   </div>
@@ -1430,6 +1442,45 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
+    // ===== IndexedDB ラッパー =====
+    const _DB_NAME  = 'BlockCraft';
+    const _DB_VER   = 1;
+    const _DB_STORE = 'kv';
+
+    const _dbReady = new Promise((resolve, reject) => {
+      const req = indexedDB.open(_DB_NAME, _DB_VER);
+      req.onupgradeneeded = e => e.target.result.createObjectStore(_DB_STORE);
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror   = e => reject(e.target.error);
+    });
+
+    async function dbGet(key) {
+      const db = await _dbReady;
+      return new Promise((resolve, reject) => {
+        const req = db.transaction(_DB_STORE).objectStore(_DB_STORE).get(key);
+        req.onsuccess = () => resolve(req.result ?? null);
+        req.onerror   = () => reject(req.error);
+      });
+    }
+
+    async function dbSet(key, value) {
+      const db = await _dbReady;
+      return new Promise((resolve, reject) => {
+        const req = db.transaction(_DB_STORE, 'readwrite').objectStore(_DB_STORE).put(value, key);
+        req.onsuccess = () => resolve();
+        req.onerror   = () => reject(req.error);
+      });
+    }
+
+    async function dbRemove(key) {
+      const db = await _dbReady;
+      return new Promise((resolve, reject) => {
+        const req = db.transaction(_DB_STORE, 'readwrite').objectStore(_DB_STORE).delete(key);
+        req.onsuccess = () => resolve();
+        req.onerror   = () => reject(req.error);
+      });
+    }
+
     // --- 🔊 音声・バイブ ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playSound(type) {
@@ -1597,6 +1648,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     let wbPreviewMesh    = null;
     let wbTapStartX      = 0, wbTapStartY = 0;
     const wbRaycaster    = new THREE.Raycaster();
+    // WBモード専用軌道カメラ
+    const wbCamTarget    = new THREE.Vector3();
+    let wbCamRadius      = 20;
+    let wbCamTheta       = 0;
+    let wbCamPhi         = Math.PI / 4;
+    // タップエイム
+    let wbAimNDC         = { x: 0, y: 0 };
+    let wbAimLocked      = false;
     // WB モード用独立カメラ（FPS視点で自由移動）
     const wbCam = { pos: new THREE.Vector3(), yaw: 0, pitch: 0, velY: 0 };
 
@@ -2449,40 +2508,37 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       updateBlockCount();
     }
 
-    function autoSave() {
+    async function autoSave() {
       try {
         const state = serializeCurrentState();
         const key = survivalWorkshop ? 'block_craft_survival' : 'block_craft_autosave';
-        localStorage.setItem(key, JSON.stringify(state));
+        await dbSet(key, state);
       } catch (e) {
         console.warn('AutoSave failed:', e);
       }
     }
 
-    function autoLoad() {
+    async function autoLoad() {
       try {
-        const saved = localStorage.getItem('block_craft_autosave');
-        if (saved) {
-          loadStateData(JSON.parse(saved));
-        }
+        const saved = await dbGet('block_craft_autosave');
+        if (saved) loadStateData(saved);
       } catch (e) {
         console.warn('AutoLoad failed:', e);
       }
     }
 
-    function getSavedSlots() {
+    async function getSavedSlots() {
       try {
-        const saved = localStorage.getItem('block_craft_slots');
-        return saved ? JSON.parse(saved) : {};
+        return (await dbGet('block_craft_slots')) ?? {};
       } catch (e) {
         return {};
       }
     }
 
-    function updateSaveListUI() {
+    async function updateSaveListUI() {
       const container = document.getElementById('save-list-container');
       container.innerHTML = '';
-      const slots = getSavedSlots();
+      const slots = await getSavedSlots();
       const keys = Object.keys(slots);
 
       if (keys.length === 0) {
@@ -2504,23 +2560,23 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       });
     }
 
-    function saveCurrentSlot() {
+    async function saveCurrentSlot() {
       const input = document.getElementById('save-name-input');
       const name = input.value.trim();
       if (!name) {
         alert('作品名を入力してください');
         return;
       }
-      const slots = getSavedSlots();
+      const slots = await getSavedSlots();
       slots[name] = serializeCurrentState();
-      localStorage.setItem('block_craft_slots', JSON.stringify(slots));
+      await dbSet('block_craft_slots', slots);
       input.value = '';
       updateSaveListUI();
       triggerVibrate();
     }
 
-    function loadSlot(name) {
-      const slots = getSavedSlots();
+    async function loadSlot(name) {
+      const slots = await getSavedSlots();
       if (slots[name]) {
         loadStateData(slots[name]);
         autoSave();
@@ -2528,20 +2584,20 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
     }
 
-    function deleteSlot(name) {
+    async function deleteSlot(name) {
       if (confirm(`作品「${name}」を削除しますか？`)) {
-        const slots = getSavedSlots();
+        const slots = await getSavedSlots();
         delete slots[name];
-        localStorage.setItem('block_craft_slots', JSON.stringify(slots));
+        await dbSet('block_craft_slots', slots);
         updateSaveListUI();
         triggerVibrate();
       }
     }
 
-    function exportAllSaves() {
+    async function exportAllSaves() {
       const data = {
         autosave: serializeCurrentState(),
-        slots: getSavedSlots()
+        slots: await getSavedSlots()
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -2556,12 +2612,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const file = event.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const data = JSON.parse(e.target.result);
-          if (data.slots) {
-            localStorage.setItem('block_craft_slots', JSON.stringify(data.slots));
-          }
+          if (data.slots) await dbSet('block_craft_slots', data.slots);
           if (data.autosave) {
             loadStateData(data.autosave);
             autoSave();
@@ -2649,10 +2703,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         player.pitch += dy * 0.003;
         player.pitch  = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
       } else if (worldBuildMode) {
-        // WB モード: orbit カメラ回転（survivalCamTheta/Phi）
+        // WB モード: 独立軌道カメラ回転
         if (!survivalPinching) {
-          survivalCamTheta -= dx * 0.005;
-          survivalCamPhi = Math.max(0.05, Math.min(Math.PI * 0.95, survivalCamPhi + dy * 0.005));
+          wbCamTheta -= dx * 0.005;
+          wbCamPhi = Math.max(0.05, Math.min(Math.PI * 0.95, wbCamPhi + dy * 0.005));
         }
       } else {
         // 通常サバイバル: ピンチ中はカメラ回転をスキップ
@@ -2664,10 +2718,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     });
     window.addEventListener('pointerup', (e) => {
       if (e.pointerId === fpsLookTouchId) {
-        // WB モード: タップ判定（小さな移動 = タップ）
+        // WB モード: タップ判定（小さな移動 = エイム設定）
         if (gameMode === 'survival' && worldBuildMode) {
           const moved = Math.hypot(e.clientX - wbTapStartX, e.clientY - wbTapStartY);
-          if (moved < 12) _wbTapPlace();
+          if (moved < 12) {
+            wbAimNDC.x = (wbTapStartX / window.innerWidth)  * 2 - 1;
+            wbAimNDC.y = -(wbTapStartY / window.innerHeight) * 2 + 1;
+            wbAimLocked = true;
+          }
         }
         fpsLookTouchId = null;
       }
@@ -2702,7 +2760,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         if (gameMode === 'survival') {
           survivalPinching = true;
           survivalInitialPinchDist = dist;
-          survivalInitialCamDist = survivalCamDist;
+          survivalInitialCamDist = worldBuildMode ? wbCamRadius : survivalCamDist;
         }
       } else if (activeTouches.size === 1) {
         _buildTouchLastX = e.clientX;
@@ -2717,14 +2775,37 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
       if (gameMode === 'fps') return;
 
-      // サバイバル走行中: 2本指ピンチズームのみ
+      // サバイバル走行中: 2本指ピンチズーム（WBモードはパンも追加）
       if (gameMode === 'survival') {
         if (activeTouches.size === 2 && survivalInitialPinchDist) {
           const points = Array.from(activeTouches.values());
           const currentDist = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
           if (currentDist > 0) {
             const factor = survivalInitialPinchDist / currentDist;
-            survivalCamDist = Math.max(8, Math.min(60, survivalInitialCamDist * factor));
+            if (worldBuildMode) {
+              wbCamRadius = Math.max(5, Math.min(80, survivalInitialCamDist * factor));
+            } else {
+              survivalCamDist = Math.max(8, Math.min(60, survivalInitialCamDist * factor));
+            }
+          }
+          // WBモード: 2本指パンでカメラ中心点を移動
+          if (worldBuildMode) {
+            const currentPanCenter = {
+              x: (points[0].x + points[1].x) / 2,
+              y: (points[0].y + points[1].y) / 2
+            };
+            if (lastPanCenter) {
+              const dx = currentPanCenter.x - lastPanCenter.x;
+              const dy = currentPanCenter.y - lastPanCenter.y;
+              const panSpeed = wbCamRadius * 0.0015;
+              const forward = new THREE.Vector3().subVectors(wbCamTarget, camera.position);
+              forward.y = 0; forward.normalize();
+              const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+              wbCamTarget.addScaledVector(right, -dx * panSpeed);
+              wbCamTarget.addScaledVector(forward, dy * panSpeed);
+            }
+            lastPanCenter = currentPanCenter;
+            updateWBCameraPos();
           }
         }
         return;
@@ -2803,7 +2884,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // マウスホイールでの拡大縮小サポート
     dom.addEventListener('wheel', (e) => {
       e.preventDefault();
-      if (gameMode === 'survival') {
+      if (gameMode === 'survival' && worldBuildMode) {
+        wbCamRadius = Math.max(5, Math.min(80, wbCamRadius + e.deltaY * 0.05));
+      } else if (gameMode === 'survival') {
         survivalCamDist = Math.max(8, Math.min(60, survivalCamDist + e.deltaY * 0.05));
       } else {
         cameraRadius = Math.max(5, Math.min(80, cameraRadius + e.deltaY * 0.02));
@@ -3610,6 +3693,17 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       camera.lookAt(sx, sy + 1.2, sz);
     }
 
+    function updateWBCameraPos() {
+      const sinPhi = Math.sin(wbCamPhi);
+      const cosPhi = Math.cos(wbCamPhi);
+      camera.position.set(
+        wbCamTarget.x + wbCamRadius * sinPhi * Math.sin(wbCamTheta),
+        wbCamTarget.y + wbCamRadius * cosPhi,
+        wbCamTarget.z + wbCamRadius * sinPhi * Math.cos(wbCamTheta)
+      );
+      camera.lookAt(wbCamTarget);
+    }
+
     // シード付き疑似乱数（地形オブジェクトを毎回同じ位置に配置するため）
     function mulberry32(seed) {
       return function () {
@@ -4257,20 +4351,20 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       document.getElementById('inv-cap').textContent = `${total}/${totalCargoCapacity}`;
     }
 
-    function saveDestroyedTerrain() {
-      try { localStorage.setItem('blockcraft_destroyed', JSON.stringify([...destroyedTerrain])); } catch(e) {}
+    async function saveDestroyedTerrain() {
+      try { await dbSet('blockcraft_destroyed', [...destroyedTerrain]); } catch(e) {}
     }
 
-    function loadDestroyedTerrain() {
+    async function loadDestroyedTerrain() {
       try {
-        const raw = localStorage.getItem('blockcraft_destroyed');
-        if (raw) JSON.parse(raw).forEach(k => destroyedTerrain.add(k));
+        const raw = await dbGet('blockcraft_destroyed');
+        if (raw) raw.forEach(k => destroyedTerrain.add(k));
       } catch(e) {}
     }
 
-    function clearDestroyedTerrain() {
+    async function clearDestroyedTerrain() {
       destroyedTerrain.clear();
-      localStorage.removeItem('blockcraft_destroyed');
+      await dbRemove('blockcraft_destroyed');
     }
 
     function clearDroppedItems() {
@@ -4329,14 +4423,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       document.getElementById('base-total').textContent = baseInventory.stone + baseInventory.wood;
     }
 
-    function saveBaseInventory() {
-      try { localStorage.setItem('blockcraft_base_inv', JSON.stringify(baseInventory)); } catch(e) {}
+    async function saveBaseInventory() {
+      try { await dbSet('blockcraft_base_inv', baseInventory); } catch(e) {}
     }
 
-    function loadBaseInventory() {
+    async function loadBaseInventory() {
       try {
-        const raw = localStorage.getItem('blockcraft_base_inv');
-        if (raw) { const d = JSON.parse(raw); baseInventory.stone = d.stone||0; baseInventory.wood = d.wood||0; }
+        const d = await dbGet('blockcraft_base_inv');
+        if (d) { baseInventory.stone = d.stone||0; baseInventory.wood = d.wood||0; }
       } catch(e) {}
     }
 
@@ -4534,8 +4628,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     // ===== ワールドブロック: レイキャスト & プレビュー =====
     function _getWBTarget() {
-      // 画面中心からレイを飛ばして地形 or ワールドブロックにヒット
-      wbRaycaster.setFromCamera({ x: 0, y: 0 }, camera);
+      // タップしたNDC座標からレイを飛ばして地形 or ワールドブロックにヒット
+      wbRaycaster.setFromCamera(wbAimNDC, camera);
       // ワールドブロックメッシュを収集
       const wbMeshes = [];
       worldChunkMap.forEach(entry => { if (entry.mesh) wbMeshes.push(entry.mesh); });
@@ -4550,18 +4644,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function _updateWBPreview() {
-      if (!worldBuildMode || wbDeleteMode) {
+      if (!worldBuildMode || !wbAimLocked) {
         if (wbPreviewMesh) wbPreviewMesh.visible = false;
         return;
       }
       const hit = _getWBTarget();
       if (!hit) { if (wbPreviewMesh) wbPreviewMesh.visible = false; return; }
 
-      // ノーマル方向にオフセットして配置位置を計算
       const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
-      const px = Math.round(hit.point.x + n.x * 0.5);
-      const py = Math.floor(hit.point.y + n.y * 0.5);
-      const pz = Math.round(hit.point.z + n.z * 0.5);
 
       if (!wbPreviewMesh) {
         wbPreviewMesh = new THREE.Mesh(
@@ -4570,9 +4660,25 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         );
         scene.add(wbPreviewMesh);
       }
-      wbPreviewMesh.material.color.setHex(wbCurrentColor);
-      wbPreviewMesh.position.set(px, py + 0.5, pz);
-      wbPreviewMesh.visible = true;
+
+      if (wbDeleteMode) {
+        // 削除モード: ターゲットブロックを赤くハイライト
+        const p = hit.point.clone().sub(n.clone().multiplyScalar(0.5));
+        const px = Math.round(p.x), py = Math.floor(p.y), pz = Math.round(p.z);
+        wbPreviewMesh.material.color.setHex(0xff2222);
+        wbPreviewMesh.material.opacity = 0.55;
+        wbPreviewMesh.position.set(px, py + 0.5, pz);
+        wbPreviewMesh.visible = !!hit.object.userData.isWorldBlock;
+      } else {
+        // 配置モード: 面法線方向に配置予測
+        const px = Math.round(hit.point.x + n.x * 0.5);
+        const py = Math.floor(hit.point.y + n.y * 0.5);
+        const pz = Math.round(hit.point.z + n.z * 0.5);
+        wbPreviewMesh.material.color.setHex(wbCurrentColor);
+        wbPreviewMesh.material.opacity = 0.45;
+        wbPreviewMesh.position.set(px, py + 0.5, pz);
+        wbPreviewMesh.visible = true;
+      }
     }
 
     function _wbTapPlace() {
@@ -4596,14 +4702,37 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
     }
 
+    function _wbConfirmAction() {
+      if (!wbPreviewMesh || !wbPreviewMesh.visible) return;
+      if (wbDeleteMode) {
+        const hit = _getWBTarget();
+        if (!hit || !hit.object.userData.isWorldBlock) return;
+        const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+        const p = hit.point.clone().sub(n.multiplyScalar(0.5));
+        removeWorldBlock(Math.round(p.x), Math.floor(p.y), Math.round(p.z));
+        saveWorldBlocks();
+        wbAimLocked = false;
+        wbPreviewMesh.visible = false;
+      } else {
+        const pos = wbPreviewMesh.position;
+        placeWorldBlock(Math.round(pos.x), Math.round(pos.y - 0.5), Math.round(pos.z), wbCurrentColor);
+        saveWorldBlocks();
+      }
+    }
+
     // ===== ワールドビルドモード: 入退出 =====
     function enterWorldBuildMode() {
       worldBuildMode = true;
-      document.getElementById('wb-crosshair').style.display  = 'block';
+      // WBカメラを車両位置で初期化
+      wbCamTarget.set(vehicleState.pos.x, vehicleState.pos.y, vehicleState.pos.z);
+      wbCamRadius = survivalCamDist;
+      wbCamTheta  = survivalCamTheta;
+      wbCamPhi    = survivalCamPhi;
+      wbAimLocked = false;
+      if (wbPreviewMesh) wbPreviewMesh.visible = false;
       document.getElementById('wb-panel').style.display      = 'flex';
       document.getElementById('wb-build-toggle-btn').classList.add('active');
       document.getElementById('wb-build-toggle-btn').textContent = '🚗 走行';
-      // 走行中バッジを隠してWBパネルのスペースを確保
       document.getElementById('badge-speed').style.display  = 'none';
       document.getElementById('badge-gear').style.display   = 'none';
       document.getElementById('badge-engine').style.display = 'none';
@@ -4611,12 +4740,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function exitWorldBuildMode() {
       worldBuildMode = false;
+      wbAimLocked = false;
       if (wbPreviewMesh) wbPreviewMesh.visible = false;
-      document.getElementById('wb-crosshair').style.display  = 'none';
       document.getElementById('wb-panel').style.display      = 'none';
       document.getElementById('wb-build-toggle-btn').classList.remove('active');
       document.getElementById('wb-build-toggle-btn').textContent = '🧱 建設';
-      // バッジ復元
       document.getElementById('badge-speed').style.display  = '';
       document.getElementById('badge-gear').style.display   = '';
       document.getElementById('badge-engine').style.display = '';
@@ -4628,26 +4756,26 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function toggleWBDelete() {
       wbDeleteMode = !wbDeleteMode;
-      const btn = document.getElementById('wb-delete-btn');
-      btn.classList.toggle('active', wbDeleteMode);
+      document.getElementById('wb-delete-btn').classList.toggle('active', wbDeleteMode);
+      document.getElementById('wb-confirm-btn').textContent = wbDeleteMode ? '🗑 削除実行' : '✅ 配置';
+      wbAimLocked = false;
       if (wbPreviewMesh) wbPreviewMesh.visible = false;
     }
 
     // ===== ワールドブロック: セーブ/ロード =====
-    function saveWorldBlocks() {
+    async function saveWorldBlocks() {
       const arr = [];
       worldBlockMap.forEach((color, key) => {
         const [x, y, z] = key.split('|').map(Number);
         arr.push({ x, y, z, color });
       });
-      try { localStorage.setItem('block_craft_world', JSON.stringify(arr)); } catch(e) {}
+      try { await dbSet('block_craft_world', arr); } catch(e) {}
     }
 
-    function loadWorldBlocks() {
+    async function loadWorldBlocks() {
       try {
-        const raw = localStorage.getItem('block_craft_world');
-        if (!raw) return;
-        const arr = JSON.parse(raw);
+        const arr = await dbGet('block_craft_world');
+        if (!arr) return;
         arr.forEach(({ x, y, z, color }) => placeWorldBlock(x, y, z, color));
       } catch(e) {}
     }
@@ -4745,9 +4873,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       lastSurvivalTime = now;
       if (dt <= 0) return;
 
-      // WB モード中: 車両を中心にした orbit カメラ（FPS カメラ廃止）
+      // WB モード中: パン可能な独立軌道カメラ
       if (worldBuildMode) {
-        updateSurvivalCamera();
+        updateWBCameraPos();
         document.getElementById('badge-flip').style.display = 'none';
         _flipTimer = 0;
         _updateWBPreview();
@@ -5190,10 +5318,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     // ===== サバイバル開始オプション =====
-    function showSurvivalOptions() {
-      const hasAutosave = !!localStorage.getItem('block_craft_survival');
-      document.getElementById('btn-survival-continue').style.display = hasAutosave ? '' : 'none';
-      renderSurvivalLoadSlots();
+    async function showSurvivalOptions() {
+      const autosave = await dbGet('block_craft_survival');
+      document.getElementById('btn-survival-continue').style.display = autosave ? '' : 'none';
+      await renderSurvivalLoadSlots();
       document.getElementById('opening-modes').style.display = 'none';
       document.getElementById('survival-options').style.display = 'flex';
     }
@@ -5217,19 +5345,19 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }, 450);
     }
 
-    function survivalNewGame() {
-      localStorage.removeItem('block_craft_survival');
+    async function survivalNewGame() {
+      await dbRemove('block_craft_survival');
       clearDestroyedTerrain();
       clearDroppedItems();
       _launchSurvivalWorkshop(() => spawnWorkshopCockpit());
     }
 
     function survivalContinue() {
-      _launchSurvivalWorkshop(() => {
-        const saved = localStorage.getItem('block_craft_survival');
+      _launchSurvivalWorkshop(async () => {
+        const saved = await dbGet('block_craft_survival');
         if (saved) {
           try {
-            loadStateData(JSON.parse(saved));
+            loadStateData(saved);
             cameraTarget.set(0, 2, 0);
             cameraRadius = 15;
             cameraPhi    = Math.PI / 3;
@@ -5242,8 +5370,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       });
     }
 
-    function survivalLoadFromOpening(name) {
-      const slots = getSurvivalSlots();
+    async function survivalLoadFromOpening(name) {
+      const slots = await getSurvivalSlots();
       const slot = slots[name];
       if (!slot) return;
       _launchSurvivalWorkshop(() => {
@@ -5260,28 +5388,27 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     // ===== サバイバルセーブ/ロード =====
-    function getSurvivalSlots() {
+    async function getSurvivalSlots() {
       try {
-        const s = localStorage.getItem('block_craft_survival_slots');
-        return s ? JSON.parse(s) : {};
+        return (await dbGet('block_craft_survival_slots')) ?? {};
       } catch (e) { return {}; }
     }
 
-    function executeSurvivalSave() {
+    async function executeSurvivalSave() {
       const input = document.getElementById('surv-save-name-input');
       const name = input.value.trim();
       if (!name) { input.focus(); return; }
       try {
-        const slots = getSurvivalSlots();
+        const slots = await getSurvivalSlots();
         slots[name] = { data: serializeCurrentState(), timestamp: Date.now() };
-        localStorage.setItem('block_craft_survival_slots', JSON.stringify(slots));
+        await dbSet('block_craft_survival_slots', slots);
         input.value = '';
         renderSurvivalSaveModal();
-      } catch (e) { alert('セーブに失敗しました（ストレージ容量不足の可能性）'); }
+      } catch (e) { alert('セーブに失敗しました'); }
     }
 
-    function survivalLoadSlot(name) {
-      const slots = getSurvivalSlots();
+    async function survivalLoadSlot(name) {
+      const slots = await getSurvivalSlots();
       const slot = slots[name];
       if (!slot) return;
       loadStateData(slot.data);
@@ -5289,10 +5416,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       closeSurvivalSaveModal();
     }
 
-    function survivalDeleteSlot(name) {
-      const slots = getSurvivalSlots();
+    async function survivalDeleteSlot(name) {
+      const slots = await getSurvivalSlots();
       delete slots[name];
-      localStorage.setItem('block_craft_survival_slots', JSON.stringify(slots));
+      await dbSet('block_craft_survival_slots', slots);
       renderSurvivalSaveModal();
     }
 
@@ -5305,8 +5432,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       document.getElementById('survival-save-modal').style.display = 'none';
     }
 
-    function renderSurvivalSaveModal() {
-      const slots = getSurvivalSlots();
+    async function renderSurvivalSaveModal() {
+      const slots = await getSurvivalSlots();
       const container = document.getElementById('surv-save-slot-list');
       const entries = Object.entries(slots).sort((a, b) => b[1].timestamp - a[1].timestamp);
       if (entries.length === 0) {
@@ -5330,8 +5457,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       });
     }
 
-    function renderSurvivalLoadSlots() {
-      const slots = getSurvivalSlots();
+    async function renderSurvivalLoadSlots() {
+      const slots = await getSurvivalSlots();
       const container = document.getElementById('survival-load-slots');
       container.innerHTML = '';
       const entries = Object.entries(slots).sort((a, b) => b[1].timestamp - a[1].timestamp);
