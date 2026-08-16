@@ -1430,6 +1430,45 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
+    // ===== IndexedDB ラッパー =====
+    const _DB_NAME  = 'BlockCraft';
+    const _DB_VER   = 1;
+    const _DB_STORE = 'kv';
+
+    const _dbReady = new Promise((resolve, reject) => {
+      const req = indexedDB.open(_DB_NAME, _DB_VER);
+      req.onupgradeneeded = e => e.target.result.createObjectStore(_DB_STORE);
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror   = e => reject(e.target.error);
+    });
+
+    async function dbGet(key) {
+      const db = await _dbReady;
+      return new Promise((resolve, reject) => {
+        const req = db.transaction(_DB_STORE).objectStore(_DB_STORE).get(key);
+        req.onsuccess = () => resolve(req.result ?? null);
+        req.onerror   = () => reject(req.error);
+      });
+    }
+
+    async function dbSet(key, value) {
+      const db = await _dbReady;
+      return new Promise((resolve, reject) => {
+        const req = db.transaction(_DB_STORE, 'readwrite').objectStore(_DB_STORE).put(value, key);
+        req.onsuccess = () => resolve();
+        req.onerror   = () => reject(req.error);
+      });
+    }
+
+    async function dbRemove(key) {
+      const db = await _dbReady;
+      return new Promise((resolve, reject) => {
+        const req = db.transaction(_DB_STORE, 'readwrite').objectStore(_DB_STORE).delete(key);
+        req.onsuccess = () => resolve();
+        req.onerror   = () => reject(req.error);
+      });
+    }
+
     // --- 🔊 音声・バイブ ---
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playSound(type) {
@@ -2449,40 +2488,37 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       updateBlockCount();
     }
 
-    function autoSave() {
+    async function autoSave() {
       try {
         const state = serializeCurrentState();
         const key = survivalWorkshop ? 'block_craft_survival' : 'block_craft_autosave';
-        localStorage.setItem(key, JSON.stringify(state));
+        await dbSet(key, state);
       } catch (e) {
         console.warn('AutoSave failed:', e);
       }
     }
 
-    function autoLoad() {
+    async function autoLoad() {
       try {
-        const saved = localStorage.getItem('block_craft_autosave');
-        if (saved) {
-          loadStateData(JSON.parse(saved));
-        }
+        const saved = await dbGet('block_craft_autosave');
+        if (saved) loadStateData(saved);
       } catch (e) {
         console.warn('AutoLoad failed:', e);
       }
     }
 
-    function getSavedSlots() {
+    async function getSavedSlots() {
       try {
-        const saved = localStorage.getItem('block_craft_slots');
-        return saved ? JSON.parse(saved) : {};
+        return (await dbGet('block_craft_slots')) ?? {};
       } catch (e) {
         return {};
       }
     }
 
-    function updateSaveListUI() {
+    async function updateSaveListUI() {
       const container = document.getElementById('save-list-container');
       container.innerHTML = '';
-      const slots = getSavedSlots();
+      const slots = await getSavedSlots();
       const keys = Object.keys(slots);
 
       if (keys.length === 0) {
@@ -2504,23 +2540,23 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       });
     }
 
-    function saveCurrentSlot() {
+    async function saveCurrentSlot() {
       const input = document.getElementById('save-name-input');
       const name = input.value.trim();
       if (!name) {
         alert('作品名を入力してください');
         return;
       }
-      const slots = getSavedSlots();
+      const slots = await getSavedSlots();
       slots[name] = serializeCurrentState();
-      localStorage.setItem('block_craft_slots', JSON.stringify(slots));
+      await dbSet('block_craft_slots', slots);
       input.value = '';
       updateSaveListUI();
       triggerVibrate();
     }
 
-    function loadSlot(name) {
-      const slots = getSavedSlots();
+    async function loadSlot(name) {
+      const slots = await getSavedSlots();
       if (slots[name]) {
         loadStateData(slots[name]);
         autoSave();
@@ -2528,20 +2564,20 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
     }
 
-    function deleteSlot(name) {
+    async function deleteSlot(name) {
       if (confirm(`作品「${name}」を削除しますか？`)) {
-        const slots = getSavedSlots();
+        const slots = await getSavedSlots();
         delete slots[name];
-        localStorage.setItem('block_craft_slots', JSON.stringify(slots));
+        await dbSet('block_craft_slots', slots);
         updateSaveListUI();
         triggerVibrate();
       }
     }
 
-    function exportAllSaves() {
+    async function exportAllSaves() {
       const data = {
         autosave: serializeCurrentState(),
-        slots: getSavedSlots()
+        slots: await getSavedSlots()
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -2556,12 +2592,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const file = event.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const data = JSON.parse(e.target.result);
-          if (data.slots) {
-            localStorage.setItem('block_craft_slots', JSON.stringify(data.slots));
-          }
+          if (data.slots) await dbSet('block_craft_slots', data.slots);
           if (data.autosave) {
             loadStateData(data.autosave);
             autoSave();
@@ -4257,20 +4291,20 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       document.getElementById('inv-cap').textContent = `${total}/${totalCargoCapacity}`;
     }
 
-    function saveDestroyedTerrain() {
-      try { localStorage.setItem('blockcraft_destroyed', JSON.stringify([...destroyedTerrain])); } catch(e) {}
+    async function saveDestroyedTerrain() {
+      try { await dbSet('blockcraft_destroyed', [...destroyedTerrain]); } catch(e) {}
     }
 
-    function loadDestroyedTerrain() {
+    async function loadDestroyedTerrain() {
       try {
-        const raw = localStorage.getItem('blockcraft_destroyed');
-        if (raw) JSON.parse(raw).forEach(k => destroyedTerrain.add(k));
+        const raw = await dbGet('blockcraft_destroyed');
+        if (raw) raw.forEach(k => destroyedTerrain.add(k));
       } catch(e) {}
     }
 
-    function clearDestroyedTerrain() {
+    async function clearDestroyedTerrain() {
       destroyedTerrain.clear();
-      localStorage.removeItem('blockcraft_destroyed');
+      await dbRemove('blockcraft_destroyed');
     }
 
     function clearDroppedItems() {
@@ -4329,14 +4363,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       document.getElementById('base-total').textContent = baseInventory.stone + baseInventory.wood;
     }
 
-    function saveBaseInventory() {
-      try { localStorage.setItem('blockcraft_base_inv', JSON.stringify(baseInventory)); } catch(e) {}
+    async function saveBaseInventory() {
+      try { await dbSet('blockcraft_base_inv', baseInventory); } catch(e) {}
     }
 
-    function loadBaseInventory() {
+    async function loadBaseInventory() {
       try {
-        const raw = localStorage.getItem('blockcraft_base_inv');
-        if (raw) { const d = JSON.parse(raw); baseInventory.stone = d.stone||0; baseInventory.wood = d.wood||0; }
+        const d = await dbGet('blockcraft_base_inv');
+        if (d) { baseInventory.stone = d.stone||0; baseInventory.wood = d.wood||0; }
       } catch(e) {}
     }
 
@@ -4634,20 +4668,19 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     // ===== ワールドブロック: セーブ/ロード =====
-    function saveWorldBlocks() {
+    async function saveWorldBlocks() {
       const arr = [];
       worldBlockMap.forEach((color, key) => {
         const [x, y, z] = key.split('|').map(Number);
         arr.push({ x, y, z, color });
       });
-      try { localStorage.setItem('block_craft_world', JSON.stringify(arr)); } catch(e) {}
+      try { await dbSet('block_craft_world', arr); } catch(e) {}
     }
 
-    function loadWorldBlocks() {
+    async function loadWorldBlocks() {
       try {
-        const raw = localStorage.getItem('block_craft_world');
-        if (!raw) return;
-        const arr = JSON.parse(raw);
+        const arr = await dbGet('block_craft_world');
+        if (!arr) return;
         arr.forEach(({ x, y, z, color }) => placeWorldBlock(x, y, z, color));
       } catch(e) {}
     }
@@ -5190,10 +5223,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     // ===== サバイバル開始オプション =====
-    function showSurvivalOptions() {
-      const hasAutosave = !!localStorage.getItem('block_craft_survival');
-      document.getElementById('btn-survival-continue').style.display = hasAutosave ? '' : 'none';
-      renderSurvivalLoadSlots();
+    async function showSurvivalOptions() {
+      const autosave = await dbGet('block_craft_survival');
+      document.getElementById('btn-survival-continue').style.display = autosave ? '' : 'none';
+      await renderSurvivalLoadSlots();
       document.getElementById('opening-modes').style.display = 'none';
       document.getElementById('survival-options').style.display = 'flex';
     }
@@ -5217,19 +5250,19 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }, 450);
     }
 
-    function survivalNewGame() {
-      localStorage.removeItem('block_craft_survival');
+    async function survivalNewGame() {
+      await dbRemove('block_craft_survival');
       clearDestroyedTerrain();
       clearDroppedItems();
       _launchSurvivalWorkshop(() => spawnWorkshopCockpit());
     }
 
     function survivalContinue() {
-      _launchSurvivalWorkshop(() => {
-        const saved = localStorage.getItem('block_craft_survival');
+      _launchSurvivalWorkshop(async () => {
+        const saved = await dbGet('block_craft_survival');
         if (saved) {
           try {
-            loadStateData(JSON.parse(saved));
+            loadStateData(saved);
             cameraTarget.set(0, 2, 0);
             cameraRadius = 15;
             cameraPhi    = Math.PI / 3;
@@ -5242,8 +5275,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       });
     }
 
-    function survivalLoadFromOpening(name) {
-      const slots = getSurvivalSlots();
+    async function survivalLoadFromOpening(name) {
+      const slots = await getSurvivalSlots();
       const slot = slots[name];
       if (!slot) return;
       _launchSurvivalWorkshop(() => {
@@ -5260,28 +5293,27 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     // ===== サバイバルセーブ/ロード =====
-    function getSurvivalSlots() {
+    async function getSurvivalSlots() {
       try {
-        const s = localStorage.getItem('block_craft_survival_slots');
-        return s ? JSON.parse(s) : {};
+        return (await dbGet('block_craft_survival_slots')) ?? {};
       } catch (e) { return {}; }
     }
 
-    function executeSurvivalSave() {
+    async function executeSurvivalSave() {
       const input = document.getElementById('surv-save-name-input');
       const name = input.value.trim();
       if (!name) { input.focus(); return; }
       try {
-        const slots = getSurvivalSlots();
+        const slots = await getSurvivalSlots();
         slots[name] = { data: serializeCurrentState(), timestamp: Date.now() };
-        localStorage.setItem('block_craft_survival_slots', JSON.stringify(slots));
+        await dbSet('block_craft_survival_slots', slots);
         input.value = '';
         renderSurvivalSaveModal();
-      } catch (e) { alert('セーブに失敗しました（ストレージ容量不足の可能性）'); }
+      } catch (e) { alert('セーブに失敗しました'); }
     }
 
-    function survivalLoadSlot(name) {
-      const slots = getSurvivalSlots();
+    async function survivalLoadSlot(name) {
+      const slots = await getSurvivalSlots();
       const slot = slots[name];
       if (!slot) return;
       loadStateData(slot.data);
@@ -5289,10 +5321,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       closeSurvivalSaveModal();
     }
 
-    function survivalDeleteSlot(name) {
-      const slots = getSurvivalSlots();
+    async function survivalDeleteSlot(name) {
+      const slots = await getSurvivalSlots();
       delete slots[name];
-      localStorage.setItem('block_craft_survival_slots', JSON.stringify(slots));
+      await dbSet('block_craft_survival_slots', slots);
       renderSurvivalSaveModal();
     }
 
@@ -5305,8 +5337,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       document.getElementById('survival-save-modal').style.display = 'none';
     }
 
-    function renderSurvivalSaveModal() {
-      const slots = getSurvivalSlots();
+    async function renderSurvivalSaveModal() {
+      const slots = await getSurvivalSlots();
       const container = document.getElementById('surv-save-slot-list');
       const entries = Object.entries(slots).sort((a, b) => b[1].timestamp - a[1].timestamp);
       if (entries.length === 0) {
@@ -5330,8 +5362,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       });
     }
 
-    function renderSurvivalLoadSlots() {
-      const slots = getSurvivalSlots();
+    async function renderSurvivalLoadSlots() {
+      const slots = await getSurvivalSlots();
       const container = document.getElementById('survival-load-slots');
       container.innerHTML = '';
       const entries = Object.entries(slots).sort((a, b) => b[1].timestamp - a[1].timestamp);
