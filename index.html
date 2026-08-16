@@ -1442,7 +1442,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v47';
+    const APP_VERSION = 'v48';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -5454,7 +5454,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       await dbRemove('block_craft_survival');
       clearDestroyedTerrain();
       clearDroppedItems();
-      _launchSurvivalWorkshop(() => spawnWorkshopCockpit());
+      _launchSurvivalWorkshop(() => {
+        spawnStarterVehicle();
+        cameraTarget.set(0, 2, 0);
+        cameraRadius = 18;
+        cameraPhi    = Math.PI / 3;
+        cameraTheta  = Math.PI / 4;
+        updateCameraPosition();
+      });
     }
 
     function survivalContinue() {
