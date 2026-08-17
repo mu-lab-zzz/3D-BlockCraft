@@ -1442,7 +1442,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v49';
+    const APP_VERSION = 'v50';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -3104,6 +3104,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         if (mode === 'add') {
           hoveredGroup = null;
           let originX, originY, originZ;
+          let _sideBlocked = false;
 
           // 接続面ヒット検出
           const connFace = detectConnectorFace(intersects);
@@ -3145,46 +3146,55 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
               originZ = Math.floor(hit.point.z - dim.d / 2 + 0.5);
             } else {
               const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
-              const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
-              // floor → round: 多セルブロック(2x2等)の+方向面でセルがずれる問題を修正
-              originX = Math.round(p.x) - snapOffsetX;
-              // 下面ヒット(norm.y < 0)は新ブロック高さ分下にオフセット（重複回避）
-              const hh = Math.round(dim.h * 2);
-              let rawHY = Math.round(hit.point.y * 2);
-              if (norm.y < -0.5) rawHY -= hh;
-              // 横倒しブロックの側面ヒット時: hit.point.yはバラつくのでブロックのグリッドYに揃える
-              const hitGrp = hit.object?.userData?.rootGroup;
-              if (hitGrp?.userData?.blockTilt && Math.abs(norm.y) < 0.3) {
-                rawHY = Math.round(hitGrp.position.y * 2);
-              }
-
-              // タイヤ種別 × 側面ヒット: Y を対象ブロック中心に自動スナップ & 向きを自動設定
-              if ((currentBlockType === 'wheel' || isLargeWheelType(currentBlockType))
-                  && Math.abs(norm.y) < 0.5 && hitGrp) {
-                rawHY = Math.round(hitGrp.position.y * 2);
-                let autoRot = 0;
-                if      (norm.x >  0.5) autoRot = 0;
-                else if (norm.x < -0.5) autoRot = 180;
-                else if (norm.z >  0.5) autoRot = 90;
-                else                    autoRot = 270;
-                if (autoRot !== currentRotation) {
-                  currentRotation = autoRot;
-                  updatePreviewMesh();
-                  dim = getBlockDimensions(currentBlockType, currentRotation);
+              const isWheelBlock = currentBlockType === 'wheel' || isLargeWheelType(currentBlockType);
+              if (Math.abs(norm.y) < 0.5 && !isWheelBlock && !newTilt) {
+                _sideBlocked = true;
+              } else {
+                const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
+                // floor → round: 多セルブロック(2x2等)の+方向面でセルがずれる問題を修正
+                originX = Math.round(p.x) - snapOffsetX;
+                // 下面ヒット(norm.y < 0)は新ブロック高さ分下にオフセット（重複回避）
+                const hh = Math.round(dim.h * 2);
+                let rawHY = Math.round(hit.point.y * 2);
+                if (norm.y < -0.5) rawHY -= hh;
+                // 横倒しブロックの側面ヒット時: hit.point.yはバラつくのでブロックのグリッドYに揃える
+                const hitGrp = hit.object?.userData?.rootGroup;
+                if (hitGrp?.userData?.blockTilt && Math.abs(norm.y) < 0.3) {
+                  rawHY = Math.round(hitGrp.position.y * 2);
                 }
-              }
 
-              originY = survivalWorkshop ? rawHY + snapOffsetY : Math.max(0, rawHY + snapOffsetY);
-              originZ = Math.round(p.z) - snapOffsetZ;
+                // タイヤ種別 × 側面ヒット: Y を対象ブロック中心に自動スナップ & 向きを自動設定
+                if ((currentBlockType === 'wheel' || isLargeWheelType(currentBlockType))
+                    && Math.abs(norm.y) < 0.5 && hitGrp) {
+                  rawHY = Math.round(hitGrp.position.y * 2);
+                  let autoRot = 0;
+                  if      (norm.x >  0.5) autoRot = 0;
+                  else if (norm.x < -0.5) autoRot = 180;
+                  else if (norm.z >  0.5) autoRot = 90;
+                  else                    autoRot = 270;
+                  if (autoRot !== currentRotation) {
+                    currentRotation = autoRot;
+                    updatePreviewMesh();
+                    dim = getBlockDimensions(currentBlockType, currentRotation);
+                  }
+                }
+
+                originY = survivalWorkshop ? rawHY + snapOffsetY : Math.max(0, rawHY + snapOffsetY);
+                originZ = Math.round(p.z) - snapOffsetZ;
+              }
             }
           }
 
-          targetOccupiedCells = getOccupiedCells(originX, originY, originZ, currentBlockType, currentRotation, activeTilt);
-          isCanPlace = canPlaceBlock(targetOccupiedCells);
-
-          previewMesh.position.set(originX + dim.w / 2 - 0.5, originY * 0.5 + dim.h / 2, originZ + dim.d / 2 - 0.5);
-          previewMesh.material.color.setHex(isCanPlace ? 0x00ff00 : 0xff0000);
-          previewMesh.visible = true;
+          if (_sideBlocked) {
+            previewMesh.visible = false;
+            isCanPlace = false;
+          } else {
+            targetOccupiedCells = getOccupiedCells(originX, originY, originZ, currentBlockType, currentRotation, activeTilt);
+            isCanPlace = canPlaceBlock(targetOccupiedCells);
+            previewMesh.position.set(originX + dim.w / 2 - 0.5, originY * 0.5 + dim.h / 2, originZ + dim.d / 2 - 0.5);
+            previewMesh.material.color.setHex(isCanPlace ? 0x00ff00 : 0xff0000);
+            previewMesh.visible = true;
+          }
         }
         else if (mode === 'delete') {
           if (activeTilt !== null) activeTilt = null;
@@ -5291,43 +5301,50 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
             hoveredGroup = hit.object.userData.rootGroup;
             if (hoveredGroup) {
               const norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
-              const nx = Math.round(norm.x);
-              const ny = Math.round(norm.y);
-              const nz = Math.round(norm.z);
-              const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
-              let ox = Math.round(p.x) - snapOffsetX;
-              const fpsHH = Math.round(dim.h * 2);
-              let oy = Math.round(hit.point.y * 2);
-              if (norm.y < -0.5) oy -= fpsHH;
-              // 横倒しブロックの側面ヒット時: hit.point.yはバラつくのでブロックのグリッドYに揃える
-              const hitGrpWB = hit.object?.userData?.rootGroup;
-              if (hitGrpWB?.userData?.blockTilt && Math.abs(norm.y) < 0.3) {
-                oy = Math.round(hitGrpWB.position.y * 2);
-              }
-              oy = survivalWorkshop ? oy : Math.max(0, oy);
-              let oz = Math.round(p.z) - snapOffsetZ;
-
-              targetOccupiedCells = getOccupiedCells(ox, oy, oz, currentBlockType, currentRotation, activeTilt);
-              isCanPlace = canPlaceBlock(targetOccupiedCells);
-
-              if (!isCanPlace) {
-                const ox2 = ox + nx;
-                const oy2 = survivalWorkshop ? oy + ny : Math.max(0, oy + ny);
-                const oz2 = oz + nz;
-                const cells2 = getOccupiedCells(ox2, oy2, oz2, currentBlockType, currentRotation, activeTilt);
-                if (canPlaceBlock(cells2)) {
-                  ox = ox2; oy = oy2; oz = oz2;
-                  targetOccupiedCells = cells2;
-                  isCanPlace = true;
-                }
-              }
-
-              if (isCanPlace) {
-                previewMesh.position.set(ox+dim.w/2-0.5, oy*0.5+dim.h/2, oz+dim.d/2-0.5);
-                previewMesh.material.color.setHex(0x00ff88);
-                previewMesh.visible = true;
-              } else {
+              const isWheelFPS = currentBlockType === 'wheel' || isLargeWheelType(currentBlockType);
+              if (Math.abs(norm.y) < 0.5 && !isWheelFPS && !activeTilt) {
                 previewMesh.visible = false;
+                isCanPlace = false;
+                hoveredGroup = null;
+              } else {
+                const nx = Math.round(norm.x);
+                const ny = Math.round(norm.y);
+                const nz = Math.round(norm.z);
+                const p = hit.point.clone().add(norm.clone().multiplyScalar(0.5));
+                let ox = Math.round(p.x) - snapOffsetX;
+                const fpsHH = Math.round(dim.h * 2);
+                let oy = Math.round(hit.point.y * 2);
+                if (norm.y < -0.5) oy -= fpsHH;
+                // 横倒しブロックの側面ヒット時: hit.point.yはバラつくのでブロックのグリッドYに揃える
+                const hitGrpWB = hit.object?.userData?.rootGroup;
+                if (hitGrpWB?.userData?.blockTilt && Math.abs(norm.y) < 0.3) {
+                  oy = Math.round(hitGrpWB.position.y * 2);
+                }
+                oy = survivalWorkshop ? oy : Math.max(0, oy);
+                let oz = Math.round(p.z) - snapOffsetZ;
+
+                targetOccupiedCells = getOccupiedCells(ox, oy, oz, currentBlockType, currentRotation, activeTilt);
+                isCanPlace = canPlaceBlock(targetOccupiedCells);
+
+                if (!isCanPlace) {
+                  const ox2 = ox + nx;
+                  const oy2 = survivalWorkshop ? oy + ny : Math.max(0, oy + ny);
+                  const oz2 = oz + nz;
+                  const cells2 = getOccupiedCells(ox2, oy2, oz2, currentBlockType, currentRotation, activeTilt);
+                  if (canPlaceBlock(cells2)) {
+                    ox = ox2; oy = oy2; oz = oz2;
+                    targetOccupiedCells = cells2;
+                    isCanPlace = true;
+                  }
+                }
+
+                if (isCanPlace) {
+                  previewMesh.position.set(ox+dim.w/2-0.5, oy*0.5+dim.h/2, oz+dim.d/2-0.5);
+                  previewMesh.material.color.setHex(0x00ff88);
+                  previewMesh.visible = true;
+                } else {
+                  previewMesh.visible = false;
+                }
               }
             }
           }
