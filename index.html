@@ -1442,7 +1442,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v48';
+    const APP_VERSION = 'v49';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -2229,6 +2229,21 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       return group;
     }
 
+    let _cockpitArrowTex = null;
+    function _getCockpitArrowTex() {
+      if (_cockpitArrowTex) return _cockpitArrowTex;
+      const canvas = document.createElement('canvas');
+      canvas.width = 64; canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.beginPath();
+      ctx.moveTo(32, 5); ctx.lineTo(59, 54); ctx.lineTo(5, 54);
+      ctx.closePath();
+      ctx.fill();
+      _cockpitArrowTex = new THREE.CanvasTexture(canvas);
+      return _cockpitArrowTex;
+    }
+
     function createCockpitMesh(type, color, rot) {
       const group = new THREE.Group();
       const dim = getBlockDimensions(type, rot);
@@ -2303,6 +2318,33 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const seat = new THREE.Mesh(new THREE.BoxGeometry(seatW, 0.06, seatD), darkMat);
       seat.position.set(cx, bodyH + 0.04, cz);
       group.add(seat);
+
+      // === 前面インジケーター（+Z 方向 = 前） ===
+      const frontZ = cz + (d - 0.02) / 2;
+
+      // ▲ 矢印テクスチャ（前面ボディに貼り付け）
+      const arrowW = Math.min(w * 0.42, 0.55);
+      const arrowPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(arrowW, arrowW * 0.85),
+        new THREE.MeshBasicMaterial({ map: _getCockpitArrowTex(), transparent: true, depthWrite: false })
+      );
+      arrowPlane.position.set(cx, bodyH * 0.5, frontZ + 0.003);
+      group.add(arrowPlane);
+
+      // ヘッドライト（発光シリンダー2灯）
+      const hlMat = new THREE.MeshStandardMaterial({
+        color: 0xffffcc, emissive: 0xffff44, emissiveIntensity: 1.5, roughness: 0.1, metalness: 0.2
+      });
+      const hlR = Math.min(w * 0.04, 0.065);
+      const hlLen = 0.07;
+      const hlY = bodyH * 0.38;
+      const hlSpan = Math.min(w * 0.30, 0.48);
+      [-1, 1].forEach(s => {
+        const hl = new THREE.Mesh(new THREE.CylinderGeometry(hlR, hlR, hlLen, 8), hlMat);
+        hl.rotation.x = Math.PI / 2;
+        hl.position.set(cx + s * hlSpan, hlY, frontZ + hlLen / 2);
+        group.add(hl);
+      });
 
       return group;
     }
