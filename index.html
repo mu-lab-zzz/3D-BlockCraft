@@ -1442,7 +1442,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v50';
+    const APP_VERSION = 'v51';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -1969,20 +1969,48 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const dim = getBlockDimensions(type, rot);
         group = new THREE.Group();
         const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
-
-        const body = new THREE.Mesh(new THREE.BoxGeometry(dim.w - 0.01, dim.h - 0.01, dim.d - 0.01), mat);
-        body.castShadow = true;
-        body.receiveShadow = true;
-        body.position.set(dim.w / 2 - 0.5, dim.h / 2, dim.d / 2 - 0.5);
-        group.add(body);
-
         const studGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12);
-        for (let x = 0; x < dim.w; x++) {
-          for (let z = 0; z < dim.d; z++) {
-            const stud = new THREE.Mesh(studGeo, mat);
-            stud.position.set(x, dim.h + 0.02, z);
-            stud.castShadow = true;
-            group.add(stud);
+
+        const blockTilt = tilt && isTiltableBlock(type) ? tilt : null;
+        if (blockTilt) {
+          // 横倒しブロック: 内部ピボットを回転してスタッドを軸方向へ向ける
+          const inner = new THREE.Group();
+          inner.position.set(dim.w / 2 - 0.5, dim.h / 2, dim.d / 2 - 0.5);
+
+          const body = new THREE.Mesh(new THREE.BoxGeometry(dim.w - 0.01, dim.h - 0.01, dim.d - 0.01), mat);
+          body.castShadow = true; body.receiveShadow = true;
+          inner.add(body);
+
+          // スタッドはinnerローカル+Y方向（回転後にコネクター軸方向へ変換される）
+          for (let xi = 0; xi < dim.d; xi++) {
+            for (let zi = 0; zi < dim.w; zi++) {
+              const stud = new THREE.Mesh(studGeo, mat);
+              stud.castShadow = true;
+              stud.position.set(xi - (dim.d - 1) / 2, dim.h / 2 + 0.06, zi - (dim.w - 1) / 2);
+              inner.add(stud);
+            }
+          }
+
+          if      (blockTilt === 'z+') inner.rotation.z = -Math.PI / 2;
+          else if (blockTilt === 'z-') inner.rotation.z =  Math.PI / 2;
+          else if (blockTilt === 'x+') inner.rotation.x =  Math.PI / 2;
+          else if (blockTilt === 'x-') inner.rotation.x = -Math.PI / 2;
+
+          group.add(inner);
+        } else {
+          // 通常（非tilt）ブロック
+          const body = new THREE.Mesh(new THREE.BoxGeometry(dim.w - 0.01, dim.h - 0.01, dim.d - 0.01), mat);
+          body.castShadow = true; body.receiveShadow = true;
+          body.position.set(dim.w / 2 - 0.5, dim.h / 2, dim.d / 2 - 0.5);
+          group.add(body);
+
+          for (let x = 0; x < dim.w; x++) {
+            for (let z = 0; z < dim.d; z++) {
+              const stud = new THREE.Mesh(studGeo, mat);
+              stud.position.set(x, dim.h + 0.02, z);
+              stud.castShadow = true;
+              group.add(stud);
+            }
           }
         }
       }
@@ -2388,7 +2416,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const dim = getBlockDimensions(currentBlockType, currentRotation);
       const geo = new THREE.BoxGeometry(dim.w - 0.02, dim.h - 0.02, dim.d - 0.02);
       const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
-      return new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(geo, mat);
+      if (activeTilt && isTiltableBlock(currentBlockType)) {
+        if      (activeTilt === 'z+') mesh.rotation.z = -Math.PI / 2;
+        else if (activeTilt === 'z-') mesh.rotation.z =  Math.PI / 2;
+        else if (activeTilt === 'x+') mesh.rotation.x =  Math.PI / 2;
+        else if (activeTilt === 'x-') mesh.rotation.x = -Math.PI / 2;
+      }
+      return mesh;
     }
 
     function createCylinderPreviewMesh(type, tilt) {
@@ -3050,6 +3085,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       return type === 'cyl' || type === 'cylp' || type === 'cyl05' || type === 'cyl05p';
     }
 
+    // tilt(横倒し)を適用できる通常ブロック型
+    function isTiltableBlock(type) {
+      return !isLargeWheelType(type) && type !== 'wheel' && !isCylinderType(type)
+          && type !== 'connector' && type !== 'drill' && !isCockpitType(type);
+    }
+
     function isCockpitType(type) {
       return type === 'cockpit1x1' || type === 'cockpit2x2' || type === 'cockpit2x3' || type === 'cockpit2x4';
     }
@@ -3108,12 +3149,20 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
           // 接続面ヒット検出
           const connFace = detectConnectorFace(intersects);
-          let newTilt = (connFace && isTiltableCylinder(currentBlockType))
-            ? (connFace.axleX !== 0 ? 'z' : 'x')
-            : null;
-          // コネクター未検出でも、横倒し円柱の【側面】に置く場合は同じtiltを引き継ぐ
+          let newTilt = null;
+          if (connFace) {
+            if (isTiltableCylinder(currentBlockType)) {
+              newTilt = connFace.axleX !== 0 ? 'z' : 'x';
+            } else if (isTiltableBlock(currentBlockType)) {
+              if      (connFace.axleX ===  1) newTilt = 'z+';
+              else if (connFace.axleX === -1) newTilt = 'z-';
+              else if (connFace.axleZ ===  1) newTilt = 'x+';
+              else                            newTilt = 'x-';
+            }
+          }
+          // コネクター未検出でも、横倒しブロック/円柱の【側面】に置く場合はtiltを引き継ぐ
           // ※上面/下面ヒット(|norm.y|>=0.5)は伝播しない
-          if (!newTilt && isTiltableCylinder(currentBlockType)) {
+          if (!newTilt && (isTiltableCylinder(currentBlockType) || isTiltableBlock(currentBlockType))) {
             const firstBlockHit = intersects.find(h => h.object !== plane);
             if (firstBlockHit) {
               const hitRootGrp = firstBlockHit.object?.userData?.rootGroup;
@@ -3372,7 +3421,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       snapOffsetX = 0;
       snapOffsetZ = 0;
       snapOffsetY = 0;
-      if (!isTiltableCylinder(type)) activeTilt = null;
+      if (!isTiltableCylinder(type) && !isTiltableBlock(type)) activeTilt = null;
       document.querySelectorAll('#block-picker .opt-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       updatePreviewMesh();
@@ -5258,12 +5307,20 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         } else {
           // 接続面ヒット検出
           const connFace = detectConnectorFace(hits);
-          let newTilt = (connFace && isTiltableCylinder(currentBlockType))
-            ? (connFace.axleX !== 0 ? 'z' : 'x')
-            : null;
-          // コネクター未検出でも、横倒し円柱の【側面】に置く場合は同じtiltを引き継ぐ
+          let newTilt = null;
+          if (connFace) {
+            if (isTiltableCylinder(currentBlockType)) {
+              newTilt = connFace.axleX !== 0 ? 'z' : 'x';
+            } else if (isTiltableBlock(currentBlockType)) {
+              if      (connFace.axleX ===  1) newTilt = 'z+';
+              else if (connFace.axleX === -1) newTilt = 'z-';
+              else if (connFace.axleZ ===  1) newTilt = 'x+';
+              else                            newTilt = 'x-';
+            }
+          }
+          // コネクター未検出でも、横倒しブロック/円柱の【側面】に置く場合はtiltを引き継ぐ
           // ※上面/下面ヒット(|norm.y|>=0.5)は伝播しない
-          if (!newTilt && isTiltableCylinder(currentBlockType)) {
+          if (!newTilt && (isTiltableCylinder(currentBlockType) || isTiltableBlock(currentBlockType))) {
             const firstBlockHit = hits.find(h => h.object !== plane);
             if (firstBlockHit) {
               const hitRootGrp = firstBlockHit.object?.userData?.rootGroup;
