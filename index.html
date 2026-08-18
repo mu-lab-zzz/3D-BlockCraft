@@ -1442,7 +1442,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v55';
+    const APP_VERSION = 'v56';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -1834,7 +1834,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (type === 'cyl05')   return '細柱';
       if (type === 'cyl05p')  return '細柱薄';
       if (type === 'connector') return '接続面';
-      if (type === 'drill')  return 'ドリル';
       if (type === 'drillA') return 'アーガー';
       if (type === 'drillB') return 'ロータリー';
       if (type === 'drillC') return 'ランス';
@@ -1922,42 +1921,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         if (occupiedGrid.has(key)) return false;
       }
       return true;
-    }
-
-    function createDrillMesh(color, rot) {
-      const group  = new THREE.Group();
-      const matBody = new THREE.MeshStandardMaterial({ color, roughness: 0.25, metalness: 0.65 });
-      const matBit  = new THREE.MeshStandardMaterial({ color: 0xffcc00, roughness: 0.15, metalness: 0.9 });
-
-      // 本体ブロック
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.88, 0.88), matBody);
-      body.position.set(0.5, 0.5, 0.5);
-      body.castShadow = true;
-      group.add(body);
-      // スタッド
-      const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.1, 8), matBody);
-      stud.position.set(0.5, 0.94, 0.5);
-      group.add(stud);
-      // ドリルシャフト（+Z 方向）
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.18, 0.55, 8), matBit);
-      shaft.rotation.x = Math.PI / 2;
-      shaft.position.set(0.5, 0.5, 1.22);
-      group.add(shaft);
-      // ドリル先端コーン
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.38, 8), matBit);
-      cone.rotation.x = -Math.PI / 2;
-      cone.position.set(0.5, 0.5, 1.68);
-      group.add(cone);
-      // 溝リング×2
-      [1.05, 1.35].forEach(zPos => {
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.035, 6, 12), matBody);
-        ring.rotation.y = Math.PI / 2;
-        ring.position.set(0.5, 0.5, zPos);
-        group.add(ring);
-      });
-
-      group.rotation.y = THREE.MathUtils.degToRad(rot);
-      return group;
     }
 
     function createDrillAMesh(color, rot) {
@@ -2111,7 +2074,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       else if (isLargeWheelType(type)) group = createLargeWheelMesh(type, color, rot);
       else if (isCylinderType(type)) group = createCylinderMesh(type, color, tilt);
       else if (type === 'connector') group = createConnectorMesh(color, rot);
-      else if (type === 'drill')     { group = createDrillMesh(color, rot);  group.userData.blockType = 'drill'; }
       else if (type === 'drillA')    { group = createDrillAMesh(color, rot); }
       else if (type === 'drillB')    { group = createDrillBMesh(color, rot); }
       else if (type === 'drillC')    { group = createDrillCMesh(color, rot); }
@@ -2562,7 +2524,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         return createCylinderPreviewMesh(currentBlockType, activeTilt);
       }
       if (currentBlockType === 'connector') return createConnectorPreviewMesh(currentRotation);
-      if (currentBlockType === 'drill') return createDrillPreviewMesh(currentRotation);
       if (currentBlockType === 'drillA' || currentBlockType === 'drillB' || currentBlockType === 'drillC')
         return createDrillLongPreviewMesh(currentRotation);
       if (isCockpitType(currentBlockType)) return createCockpitPreviewMesh(currentBlockType, currentRotation);
@@ -2735,36 +2696,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         }
       }
 
-      group.material = { color: { setHex: hex => group.traverse(c => { if (c.isMesh) c.material.color.setHex(hex); }) } };
-      return group;
-    }
-
-    function createDrillPreviewMesh(rot) {
-      const mkMat = () => new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.45 });
-      const group = new THREE.Group();
-
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.88, 0.88), mkMat());
-      body.position.set(0.5, 0.5, 0.5);
-      group.add(body);
-
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.18, 0.55, 8), mkMat());
-      shaft.rotation.x = Math.PI / 2;
-      shaft.position.set(0.5, 0.5, 1.22);
-      group.add(shaft);
-
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.38, 8), mkMat());
-      cone.rotation.x = -Math.PI / 2;
-      cone.position.set(0.5, 0.5, 1.68);
-      group.add(cone);
-
-      [1.05, 1.35].forEach(zPos => {
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.035, 6, 12), mkMat());
-        ring.rotation.y = Math.PI / 2;
-        ring.position.set(0.5, 0.5, zPos);
-        group.add(ring);
-      });
-
-      group.rotation.y = THREE.MathUtils.degToRad(rot);
       group.material = { color: { setHex: hex => group.traverse(c => { if (c.isMesh) c.material.color.setHex(hex); }) } };
       return group;
     }
@@ -3263,7 +3194,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function isDrillType(type) {
-      return type === 'drill' || type === 'drillA' || type === 'drillB' || type === 'drillC';
+      return type === 'drillA' || type === 'drillB' || type === 'drillC';
     }
 
     function isLargeWheelType(type) {
@@ -3589,7 +3520,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       // その他
       addSection('⚙ その他', [
         { type: 'connector', label: '接続面',    title: '回転で接続面の向きを変更' },
-        { type: 'drill',     label: 'ドリル',    title: 'サバイバルで岩・木を破壊。前面に向けて配置' },
         { type: 'drillA',    label: 'アーガー',  title: 'スクリュー式ドリル（3ブロック長）' },
         { type: 'drillB',    label: 'ロータリー',title: 'ロータリービット式ドリル（3ブロック長）' },
         { type: 'drillC',    label: 'ランス',    title: 'ランス式ドリル（3ブロック長）' },
