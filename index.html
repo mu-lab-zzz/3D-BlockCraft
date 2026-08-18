@@ -1990,9 +1990,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const sRing = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.035, 6, 10), matBit);
       sRing.rotation.y = Math.PI / 2; sRing.position.set(0, 0.5, 1.5); sRing.raycast = () => {}; group.add(sRing);
 
-      // コーン先端 (z:1.44-2.44)
+      // コーン先端 (z:1.5-2.5): 先端が+Z（前方）を向く
       const cone = new THREE.Mesh(new THREE.ConeGeometry(0.19, 1.0, 8), matBit);
-      cone.rotation.x = -Math.PI / 2; cone.position.set(0, 0.5, 2.0); cone.castShadow = true;
+      cone.rotation.x = Math.PI / 2; cone.position.set(0, 0.5, 2.0); cone.castShadow = true;
       cone.raycast = () => {}; group.add(cone);
 
       group.userData.blockType = 'drillA';
@@ -2083,9 +2083,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const sRing = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.04, 8, 10), matBody);
       sRing.rotation.y = Math.PI / 2; sRing.position.set(0, 0.5, 1.4); sRing.raycast = () => {}; group.add(sRing);
 
-      // ランス本体 (z:1.4-2.48): 4角錐
+      // ランス本体 (z:1.4-2.5): 先端が+Z（前方）を向く
       const lance = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.08, 4), matLance);
-      lance.rotation.x = -Math.PI / 2; lance.position.set(0, 0.5, 1.96); lance.castShadow = true;
+      lance.rotation.x = Math.PI / 2; lance.position.set(0, 0.5, 1.96); lance.castShadow = true;
       lance.raycast = () => {}; group.add(lance);
       // スパイラルブレード ×4
       [0.12, 0.32, 0.55, 0.74].forEach((t, i) => {
@@ -2777,7 +2777,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.26, 1.0, 8), mkMat());
       shaft.rotation.x = Math.PI / 2; shaft.position.set(0, 0.5, 1.0); group.add(shaft);
       const tip = new THREE.Mesh(new THREE.ConeGeometry(0.19, 1.0, 8), mkMat());
-      tip.rotation.x = -Math.PI / 2; tip.position.set(0, 0.5, 2.0); group.add(tip);
+      tip.rotation.x = Math.PI / 2; tip.position.set(0, 0.5, 2.0); group.add(tip);
       group.rotation.y = THREE.MathUtils.degToRad(rot);
       group.material = { color: { setHex: hex => group.traverse(c => { if (c.isMesh) c.material.color.setHex(hex); }) } };
       return group;
