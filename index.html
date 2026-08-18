@@ -1442,7 +1442,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v54';
+    const APP_VERSION = 'v55';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -1970,30 +1970,30 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       body.position.set(0.5, 0.5, 0.5); body.castShadow = true; body.receiveShadow = true;
       group.add(body);
       const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.1, 8), matBody);
-      stud.position.set(0.5, 0.94, 0.5); group.add(stud);
+      stud.position.set(0.5, 0.94, 0.5); stud.raycast = () => {}; group.add(stud);
       [-0.15, 0, 0.15].forEach(dy => {
-        const r = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.04, 0.9), matBody);
-        r.position.set(0.5, 0.5 + dy, 0.5); group.add(r);
+        const r = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.04, 0.86), matBody);
+        r.position.set(0.5, 0.5 + dy, 0.5); r.raycast = () => {}; group.add(r);
       });
 
       // テーパーシャフト (z:1-2)
       const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.27, 1.0, 8), matBit);
       shaft.rotation.x = Math.PI / 2; shaft.position.set(0.5, 0.5, 1.5); shaft.castShadow = true;
-      group.add(shaft);
+      shaft.raycast = () => {}; group.add(shaft);
       // ヘリックスフィン ×7
       for (let i = 0; i < 7; i++) {
         const t = i / 6;
         const fin = new THREE.Mesh(new THREE.BoxGeometry(0.46 - t * 0.08, 0.06, 0.13), matBit);
         fin.position.set(0.5, 0.5, 1.1 + t * 0.82); fin.rotation.z = t * Math.PI;
-        group.add(fin);
+        fin.raycast = () => {}; group.add(fin);
       }
       const sRing = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.035, 6, 10), matBit);
-      sRing.rotation.y = Math.PI / 2; sRing.position.set(0.5, 0.5, 2.0); group.add(sRing);
+      sRing.rotation.y = Math.PI / 2; sRing.position.set(0.5, 0.5, 2.0); sRing.raycast = () => {}; group.add(sRing);
 
       // コーン先端 (z:2-3)
       const cone = new THREE.Mesh(new THREE.ConeGeometry(0.19, 1.0, 8), matBit);
       cone.rotation.x = -Math.PI / 2; cone.position.set(0.5, 0.5, 2.5); cone.castShadow = true;
-      group.add(cone);
+      cone.raycast = () => {}; group.add(cone);
 
       group.userData.blockType = 'drillA';
       group.rotation.y = THREE.MathUtils.degToRad(rot);
@@ -2012,39 +2012,39 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       body.position.set(0.5, 0.5, 0.5); body.castShadow = true; body.receiveShadow = true;
       group.add(body);
       const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.1, 8), matBody);
-      stud.position.set(0.5, 0.94, 0.5); group.add(stud);
+      stud.position.set(0.5, 0.94, 0.5); stud.raycast = () => {}; group.add(stud);
       [-0.18, 0, 0.18].forEach(dy => {
         const v = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.04, 0.04), matShaft);
-        v.position.set(0.5, 0.5 + dy, 0.5); group.add(v);
+        v.position.set(0.5, 0.5 + dy, 0.5); v.raycast = () => {}; group.add(v);
       });
 
       // カラーリング
       const collar = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.05, 8, 12), matShaft);
-      collar.rotation.y = Math.PI / 2; collar.position.set(0.5, 0.5, 1.0); group.add(collar);
+      collar.rotation.y = Math.PI / 2; collar.position.set(0.5, 0.5, 1.0); collar.raycast = () => {}; group.add(collar);
 
       // 六角シャフト (z:1-1.65)
       const hexShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.62, 6), matShaft);
       hexShaft.rotation.x = Math.PI / 2; hexShaft.position.set(0.5, 0.5, 1.31); hexShaft.castShadow = true;
-      group.add(hexShaft);
+      hexShaft.raycast = () => {}; group.add(hexShaft);
 
       // 接続リング
       const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.055, 8, 12), matBit);
-      ring2.rotation.y = Math.PI / 2; ring2.position.set(0.5, 0.5, 1.62); group.add(ring2);
+      ring2.rotation.y = Math.PI / 2; ring2.position.set(0.5, 0.5, 1.62); ring2.raycast = () => {}; group.add(ring2);
 
       // ディスクヘッド (z:1.62-2.8)
       const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 1.14, 16), matBit);
       disc.rotation.x = Math.PI / 2; disc.position.set(0.5, 0.5, 2.19); disc.castShadow = true;
-      group.add(disc);
+      disc.raycast = () => {}; group.add(disc);
 
       // カッターティース ×8
       for (let i = 0; i < 8; i++) {
         const angle = (i / 8) * Math.PI * 2;
         const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.15), matTooth);
         tooth.position.set(0.5 + Math.sin(angle) * 0.43, 0.5 + Math.cos(angle) * 0.43, 2.83);
-        tooth.rotation.z = angle; group.add(tooth);
+        tooth.rotation.z = angle; tooth.raycast = () => {}; group.add(tooth);
       }
       const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.08, 6), matTooth);
-      bolt.rotation.x = Math.PI / 2; bolt.position.set(0.5, 0.5, 2.89); group.add(bolt);
+      bolt.rotation.x = Math.PI / 2; bolt.position.set(0.5, 0.5, 2.89); bolt.raycast = () => {}; group.add(bolt);
 
       group.userData.blockType = 'drillB';
       group.rotation.y = THREE.MathUtils.degToRad(rot);
@@ -2064,29 +2064,29 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       body.position.set(0.5, 0.5, 0.5); body.castShadow = true; body.receiveShadow = true;
       group.add(body);
       const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.1, 8), matBody);
-      stud.position.set(0.5, 0.94, 0.5); group.add(stud);
+      stud.position.set(0.5, 0.94, 0.5); stud.raycast = () => {}; group.add(stud);
       [-0.19, 0.19].forEach(dy => {
-        const ch = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.04, 0.04), matEnergy);
-        ch.position.set(0.5, 0.5 + dy, 0.5); group.add(ch);
+        const ch = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.04, 0.04), matEnergy);
+        ch.position.set(0.5, 0.5 + dy, 0.5); ch.raycast = () => {}; group.add(ch);
       });
 
       // 回転スリーブ (z:1-2)
       const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.9, 8), matBody);
-      sleeve.rotation.x = Math.PI / 2; sleeve.position.set(0.5, 0.5, 1.45); group.add(sleeve);
+      sleeve.rotation.x = Math.PI / 2; sleeve.position.set(0.5, 0.5, 1.45); sleeve.raycast = () => {}; group.add(sleeve);
       // ベーン ×3 (120°間隔)
       for (let i = 0; i < 3; i++) {
         const angle = (i / 3) * Math.PI * 2;
         const vane = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.3, 0.72), matVane);
         vane.position.set(0.5 + Math.sin(angle) * 0.27, 0.5 + Math.cos(angle) * 0.27, 1.45);
-        vane.rotation.z = angle; vane.castShadow = true; group.add(vane);
+        vane.rotation.z = angle; vane.castShadow = true; vane.raycast = () => {}; group.add(vane);
       }
       const sRing = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.04, 8, 10), matBody);
-      sRing.rotation.y = Math.PI / 2; sRing.position.set(0.5, 0.5, 1.9); group.add(sRing);
+      sRing.rotation.y = Math.PI / 2; sRing.position.set(0.5, 0.5, 1.9); sRing.raycast = () => {}; group.add(sRing);
 
       // ランス本体 (z:2-3): 4角錐
       const lance = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.08, 4), matLance);
       lance.rotation.x = -Math.PI / 2; lance.position.set(0.5, 0.5, 2.46); lance.castShadow = true;
-      group.add(lance);
+      lance.raycast = () => {}; group.add(lance);
       // スパイラルブレード ×4
       [0.12, 0.32, 0.55, 0.74].forEach((t, i) => {
         const zPos = 2.02 + t * 0.98;
@@ -2094,11 +2094,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const bAngle = (i % 2 === 0 ? 1 : -1) * Math.PI * 0.4;
         const blade = new THREE.Mesh(new THREE.BoxGeometry(0.04, localR * 1.8, 0.2), matLance);
         blade.position.set(0.5 + Math.sin(bAngle) * localR * 0.5, 0.5 + Math.cos(bAngle) * localR * 0.5, zPos);
-        blade.rotation.z = bAngle; group.add(blade);
+        blade.rotation.z = bAngle; blade.raycast = () => {}; group.add(blade);
       });
       // 発光チップ
       const tipGlow = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 4), matGlow);
-      tipGlow.position.set(0.5, 0.5, 3.04); group.add(tipGlow);
+      tipGlow.position.set(0.5, 0.5, 3.04); tipGlow.raycast = () => {}; group.add(tipGlow);
 
       group.userData.blockType = 'drillC';
       group.rotation.y = THREE.MathUtils.degToRad(rot);
