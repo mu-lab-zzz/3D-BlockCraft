@@ -1442,7 +1442,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v57';
+    const APP_VERSION = 'v58';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -5229,13 +5229,13 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           if (wheelInfosMeta[i].isRear && rayVehicle.wheelInfos[i].isInContact) groundedRearCount++;
         }
         // 総エンジン力 = baseForce × vehicleRearWheelCount → 接地輪で再分配
-        const groundScale = groundedRearCount > 0 ? vehicleRearWheelCount / groundedRearCount : 0;
+        // isInContactはstep前は未更新のためfallbackを1にして常に駆動を保証
+        const groundScale = groundedRearCount > 0 ? vehicleRearWheelCount / groundedRearCount : 1;
 
         for (let i = 0; i < numW; i++) {
           const meta = wheelInfosMeta[i];
           if (meta.isRear) {
-            const isGrounded = rayVehicle.wheelInfos[i].isInContact;
-            const wheelForce = (overSpeed || !isGrounded) ? 0 : baseForce * (meta.engineMult ?? 1.0) * groundScale;
+            const wheelForce = overSpeed ? 0 : baseForce * (meta.engineMult ?? 1.0) * groundScale;
             rayVehicle.applyEngineForce(wheelForce, i);
             rayVehicle.setSteeringValue(0, i);
           } else {
