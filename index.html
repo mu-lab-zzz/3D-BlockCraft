@@ -4182,8 +4182,13 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     // ブロック種別ごとの質量 (kg相当)
-    const BLOCK_MASS_TABLE = { 'wheel': 15, '2x4': 40, 'cockpit2x2': 30 };
-    const getBlockMass = type => BLOCK_MASS_TABLE[type] || 20;
+    // タイヤは固定重量、それ以外はブロック体積 × 5 (1×1×1 = 5)
+    const WHEEL_MASS = { wheel: 15, wheel3: 25, wheel5: 40, wheel5t2: 60 };
+    const getBlockMass = type => {
+      if (type === 'wheel' || isLargeWheelType(type)) return WHEEL_MASS[type] || 15;
+      const dim = getBlockDimensions(type, 0);
+      return dim.w * dim.d * dim.h * 5;
+    };
 
     // 車両の Cannon-es 剛体 + RaycastVehicle を構築
     function buildVehiclePhysics() {
