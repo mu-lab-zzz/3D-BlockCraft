@@ -1351,10 +1351,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       <div class="survival-num" id="survival-gear" style="color:#22c55e">D</div>
       <div class="survival-badge-label">ギア</div>
     </div>
-    <div class="survival-badge" id="badge-engine">
-      <div class="survival-num" id="survival-engine" style="font-size:11px;color:#f87171">-</div>
-      <div class="survival-badge-label">物理</div>
-    </div>
     <div class="survival-badge" id="badge-inventory">
       <div id="inv-items">
         <span class="inv-entry">🪨<span id="inv-stone">0</span></span>
@@ -1442,7 +1438,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v58';
+    const APP_VERSION = 'v59';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -3834,10 +3830,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       inventory.stone = 0; inventory.wood = 0;
       updateInventoryHUD();
 
-      // 物理エンジン動作状態を HUD に表示（ON=cannon-es / OFF=キネマティック）
-      const engEl = document.getElementById('survival-engine');
-      if (rayVehicle && chassisBody) { engEl.textContent = 'ON';  engEl.style.color = '#22c55e'; }
-      else                           { engEl.textContent = 'OFF'; engEl.style.color = '#f87171'; }
 
       // サバイバル UI を表示
       document.getElementById('survival-enter-btn').style.display = 'none';
