@@ -650,6 +650,25 @@
       white-space: nowrap;
     }
     #base-range-btn:active { transform: scale(0.95); }
+    #fire-btn {
+      display: none;
+      pointer-events: auto;
+      background: rgba(185,28,28,0.88);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      border: 1px solid rgba(252,165,165,0.5);
+      padding: 10px 22px;
+      border-radius: 22px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform 0.1s, background 0.1s;
+      white-space: nowrap;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #fire-btn:active, #fire-btn.held { background: rgba(239,68,68,0.95); transform: scale(0.95); }
     #base-inv-panel {
       display: none;
       position: absolute;
@@ -1339,6 +1358,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     <button id="wb-build-toggle-btn" onclick="toggleWorldBuildMode()">🧱 建設</button>
     <button id="survival-recover-btn" onclick="recoverVehicle()">↩ 回復</button>
     <button id="base-range-btn" onclick="openBaseInventory()">🏪 拠点</button>
+    <button id="fire-btn">🔫 射撃</button>
     <div class="survival-badge" id="badge-flip">
       <div class="survival-num" id="flip-countdown">3</div>
       <div class="survival-badge-label">転倒 自動回復</div>
@@ -1438,7 +1458,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v59';
+    const APP_VERSION = 'v60';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -1684,25 +1704,28 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     const droppedItems     = [];         // { mesh, type: 'stone'|'wood' }
     const destroyedTerrain = new Set();  // "cx,cz|rock|i" or "cx,cz|tree|i"
     let _drillCooldown     = 0;
+    const activeProjectiles = []; // 飛翔中の弾丸
     let currentSteer   = 0;  // ステアリング補間状態 (rad)
     let _flipTimer     = 0;  // 転倒継続秒数（自動回復カウンター）
     const FLIP_AUTO_DELAY = 3.0; // 転倒後の自動回復までの秒数
     const STEER_SPEED  = 5;  // ステアリング補間速度 (rad/s)
 
     // キーボード入力（PC テスト用）
-    const survivalKeys = { w: false, s: false, a: false, d: false };
+    const survivalKeys = { w: false, s: false, a: false, d: false, fire: false };
     window.addEventListener('keydown', (e) => {
       if (gameMode !== 'survival') return;
       if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp')    survivalKeys.w = true;
       if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown')  survivalKeys.s = true;
       if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft')  survivalKeys.a = true;
       if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') survivalKeys.d = true;
+      if (e.code === 'Space') { e.preventDefault(); survivalKeys.fire = true; }
     });
     window.addEventListener('keyup', (e) => {
       if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp')    survivalKeys.w = false;
       if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown')  survivalKeys.s = false;
       if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft')  survivalKeys.a = false;
       if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') survivalKeys.d = false;
+      if (e.code === 'Space') survivalKeys.fire = false;
     });
 
     const palette = [0xee2222, 0x2277ee, 0xffcc00, 0x22aa44, 0xffffff, 0x222222, 0x9933ee];
@@ -1801,6 +1824,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (type === 'wheel') return { w: 1, d: 1, h: 1 };
       if (isLargeWheelType(type)) return { w: 1, d: 1, h: 1 };
       if (isDrillType(type)) return { w: 1, d: 1, h: 1 };
+      if (isWeaponType(type)) return { w: 1, d: 1, h: 1 };
       if (type === 'cyl' || type === 'cyl05') return { w: 1, d: 1, h: 1 };
       if (type === 'cylp' || type === 'cyl05p') return { w: 1, d: 1, h: 0.5 };
       if (type === 'connector') return { w: 1, d: 1, h: 1 };
@@ -1834,6 +1858,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (type === 'drillA') return 'アーガー';
       if (type === 'drillB') return 'ロータリー';
       if (type === 'drillC') return 'ランス';
+      if (type === 'rifle')  return 'ライフル';
+      if (type === 'laser')  return 'レーザー';
+      if (type === 'cannon') return '大砲';
       const cylSize = getLargeCylSize(type);
       if (cylSize !== null) return `円柱${cylSize}${type.endsWith('p') ? '薄' : ''}`;
       if (isCockpitType(type)) {
@@ -2065,6 +2092,89 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       return group;
     }
 
+    function createRifleMesh(color, rot) {
+      const group = new THREE.Group();
+      const bodyMat  = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.5 });
+      const darkMat  = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.6 });
+      const metalMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.25, metalness: 0.9 });
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.58, 0.88), bodyMat);
+      body.position.set(0, 0.5, 0); group.add(body);
+
+      const brl = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.65, 10), metalMat);
+      brl.rotation.x = Math.PI / 2; brl.position.set(0, 0.60, 0.77); brl.raycast = () => {}; group.add(brl);
+
+      const muz = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.02, 6, 12), darkMat);
+      muz.rotation.x = Math.PI / 2; muz.position.set(0, 0.60, 1.10); muz.raycast = () => {}; group.add(muz);
+
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.30, 0.14), bodyMat);
+      grip.position.set(0, 0.24, 0.08); grip.raycast = () => {}; group.add(grip);
+
+      const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.38, 8), darkMat);
+      scope.rotation.x = Math.PI / 2; scope.position.set(0, 0.83, -0.02); scope.raycast = () => {}; group.add(scope);
+
+      const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.12, 12), bodyMat);
+      stud.position.set(0, 0.82, 0); stud.raycast = () => {}; group.add(stud);
+
+      group.userData.blockType = 'rifle';
+      group.rotation.y = THREE.MathUtils.degToRad(rot);
+      return group;
+    }
+
+    function createLaserMesh(color, rot) {
+      const group = new THREE.Group();
+      const bodyMat    = new THREE.MeshStandardMaterial({ color, roughness: 0.20, metalness: 0.70 });
+      const crystalMat = new THREE.MeshStandardMaterial({ color: 0x00eeff, roughness: 0.05, metalness: 0.2, emissive: 0x003344, emissiveIntensity: 1.0 });
+      const ringMat    = new THREE.MeshStandardMaterial({ color: 0x334455, roughness: 0.3, metalness: 0.8 });
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.72, 0.90), bodyMat);
+      body.position.set(0, 0.5, 0); group.add(body);
+
+      for (let i = 0; i < 3; i++) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22 - i * 0.02, 0.030, 8, 16), ringMat);
+        ring.rotation.x = Math.PI / 2; ring.position.set(0, 0.50, 0.51 + i * 0.12); ring.raycast = () => {}; group.add(ring);
+      }
+
+      const crystal = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.42, 8), crystalMat);
+      crystal.rotation.x = Math.PI / 2; crystal.position.set(0, 0.50, 0.93); crystal.raycast = () => {}; group.add(crystal);
+
+      const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.12, 12), bodyMat);
+      stud.position.set(0, 0.84, 0); stud.raycast = () => {}; group.add(stud);
+
+      group.userData.blockType = 'laser';
+      group.rotation.y = THREE.MathUtils.degToRad(rot);
+      return group;
+    }
+
+    function createCannonMesh(color, rot) {
+      const group = new THREE.Group();
+      const bodyMat  = new THREE.MeshStandardMaterial({ color, roughness: 0.50, metalness: 0.40 });
+      const metalMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.30, metalness: 0.85 });
+      const darkMat  = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6, metalness: 0.3 });
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.90, 0.84, 0.78), bodyMat);
+      body.position.set(0, 0.5, 0); group.add(body);
+
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.10, 12), metalMat);
+      collar.rotation.x = Math.PI / 2; collar.position.set(0, 0.50, 0.50); collar.raycast = () => {}; group.add(collar);
+
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.08, 12), metalMat);
+      band.rotation.x = Math.PI / 2; band.position.set(0, 0.50, 0.74); band.raycast = () => {}; group.add(band);
+
+      const brl = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.72, 12), metalMat);
+      brl.rotation.x = Math.PI / 2; brl.position.set(0, 0.50, 0.93); brl.raycast = () => {}; group.add(brl);
+
+      const muz = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.032, 6, 12), darkMat);
+      muz.rotation.x = Math.PI / 2; muz.position.set(0, 0.50, 1.30); muz.raycast = () => {}; group.add(muz);
+
+      const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.12, 12), bodyMat);
+      stud.position.set(0, 0.90, 0); stud.raycast = () => {}; group.add(stud);
+
+      group.userData.blockType = 'cannon';
+      group.rotation.y = THREE.MathUtils.degToRad(rot);
+      return group;
+    }
+
     function createBlockMesh(type, color, rot, tilt) {
       let group;
       if (type === 'wheel')          group = createWheelMesh(color, rot);
@@ -2074,6 +2184,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       else if (type === 'drillA')    { group = createDrillAMesh(color, rot); }
       else if (type === 'drillB')    { group = createDrillBMesh(color, rot); }
       else if (type === 'drillC')    { group = createDrillCMesh(color, rot); }
+      else if (type === 'rifle')     { group = createRifleMesh(color, rot); }
+      else if (type === 'laser')     { group = createLaserMesh(color, rot); }
+      else if (type === 'cannon')    { group = createCannonMesh(color, rot); }
       else if (isCockpitType(type))  group = createCockpitMesh(type, color, rot);
       else {
         const dim = getBlockDimensions(type, rot);
@@ -2523,6 +2636,16 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (currentBlockType === 'connector') return createConnectorPreviewMesh(currentRotation);
       if (currentBlockType === 'drillA' || currentBlockType === 'drillB' || currentBlockType === 'drillC')
         return createDrillLongPreviewMesh(currentRotation);
+      if (isWeaponType(currentBlockType)) {
+        const geo = new THREE.BoxGeometry(0.98, 0.98, 0.98);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(0, 0.49, 0);
+        const g = new THREE.Group();
+        g.add(mesh);
+        g.rotation.y = THREE.MathUtils.degToRad(currentRotation);
+        return g;
+      }
       if (isCockpitType(currentBlockType)) return createCockpitPreviewMesh(currentBlockType, currentRotation);
       const dim = getBlockDimensions(currentBlockType, currentRotation);
       const geo = new THREE.BoxGeometry(dim.w - 0.02, dim.h - 0.02, dim.d - 0.02);
@@ -2947,6 +3070,23 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       joyVec.y = dy / maxDist;
     }
 
+    // --- 射撃ボタン ---
+    (function() {
+      const btn = document.getElementById('fire-btn');
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        survivalKeys.fire = true;
+        btn.classList.add('held');
+      });
+      const stopFire = () => {
+        survivalKeys.fire = false;
+        document.getElementById('fire-btn').classList.remove('held');
+      };
+      btn.addEventListener('pointerup',    stopFire);
+      btn.addEventListener('pointerleave', stopFire);
+      btn.addEventListener('pointercancel',stopFire);
+    })();
+
     // --- FPS / サバイバルスワイプ視点（画面スワイプで yaw/pitch / カメラ回転）---
     window.addEventListener('pointerdown', (e) => {
       if (gameMode !== 'fps' && gameMode !== 'survival') return;
@@ -3183,7 +3323,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // tilt(横倒し)を適用できる通常ブロック型
     function isTiltableBlock(type) {
       return !isLargeWheelType(type) && type !== 'wheel' && !isCylinderType(type)
-          && type !== 'connector' && !isDrillType(type) && !isCockpitType(type);
+          && type !== 'connector' && !isDrillType(type) && !isCockpitType(type) && !isWeaponType(type);
     }
 
     function isCockpitType(type) {
@@ -3193,6 +3333,16 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function isDrillType(type) {
       return type === 'drillA' || type === 'drillB' || type === 'drillC';
     }
+
+    function isWeaponType(type) {
+      return type === 'rifle' || type === 'laser' || type === 'cannon';
+    }
+
+    const WEAPON_STATS = {
+      rifle:  { damage: 2, range: 25, cooldown: 0.15, speed: 32, gravityMult: 0.35, projColor: 0xff7700 },
+      laser:  { damage: 1, range: 45, cooldown: 0.07, speed: 80, gravityMult: 0,    projColor: 0x00eeff },
+      cannon: { damage: 4, range: 65, cooldown: 0.90, speed: 18, gravityMult: 0.60, projColor: 0xddcc44 },
+    };
 
     function isLargeWheelType(type) {
       return type === 'wheel3' || type === 'wheel5' || type === 'wheel5t2';
@@ -3515,6 +3665,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       ].map(([type, label]) => ({ type, label })));
 
       // その他
+      addSection('🔫 武器', [
+        { type: 'rifle',  label: 'ライフル', title: 'ダメージ2 射程短 連射中 放物線' },
+        { type: 'laser',  label: 'レーザー', title: 'ダメージ1 射程中 連射速 直線' },
+        { type: 'cannon', label: '大砲',     title: 'ダメージ4 射程長 連射遅 放物線' },
+      ]);
       addSection('⚙ その他', [
         { type: 'connector', label: '接続面',    title: '回転で接続面の向きを変更' },
         { type: 'drillA',    label: 'アーガー',  title: 'スクリュー式ドリル（3ブロック長）' },
@@ -3785,7 +3940,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       survivalCamPhi     = 1.2;
       survivalCamReady   = false;
       lastSurvivalTime   = performance.now();
-      survivalKeys.w = survivalKeys.s = survivalKeys.a = survivalKeys.d = false;
+      survivalKeys.w = survivalKeys.s = survivalKeys.a = survivalKeys.d = survivalKeys.fire = false;
+      clearActiveProjectiles();
+      updateFireBtnVisibility();
 
       // 建築 UI を非表示
       document.getElementById('toolbar').style.display         = 'none';
@@ -3866,6 +4023,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       saveWorldBlocks();
       saveDestroyedTerrain();
       clearDroppedItems();
+      clearActiveProjectiles();
+      survivalKeys.fire = false;
+      document.getElementById('fire-btn').style.display = 'none';
       document.getElementById('base-range-btn').style.display = 'none';
       closeBaseInventory();
       _inBaseRange = false;
@@ -4655,6 +4815,128 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
     }
 
+    // ===== 武器システム =====
+    function _makeProjectileMesh(weaponType) {
+      const c = WEAPON_STATS[weaponType].projColor;
+      let mesh;
+      if (weaponType === 'laser') {
+        const geo = new THREE.BoxGeometry(0.06, 0.06, 0.55);
+        const mat = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 2.5, roughness: 0 });
+        mesh = new THREE.Mesh(geo, mat);
+      } else if (weaponType === 'cannon') {
+        const geo = new THREE.SphereGeometry(0.20, 8, 8);
+        const mat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.4, metalness: 0.8 });
+        mesh = new THREE.Mesh(geo, mat);
+      } else {
+        const geo = new THREE.SphereGeometry(0.07, 6, 6);
+        const mat = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.8, roughness: 0.3 });
+        mesh = new THREE.Mesh(geo, mat);
+      }
+      mesh.castShadow = false;
+      return mesh;
+    }
+
+    function fireWeapons() {
+      if (!survivalKeys.fire) return;
+      const wblocks = blocksHistory.filter(h => isWeaponType(h.type));
+      if (!wblocks.length) return;
+      const now = performance.now() / 1000;
+      for (const wb of wblocks) {
+        const stats = WEAPON_STATS[wb.type];
+        if (!wb.group.userData._nextFire) wb.group.userData._nextFire = 0;
+        if (now < wb.group.userData._nextFire) continue;
+        wb.group.userData._nextFire = now + stats.cooldown;
+
+        const wpos  = new THREE.Vector3();
+        const wquat = new THREE.Quaternion();
+        wb.group.getWorldPosition(wpos);
+        wb.group.getWorldQuaternion(wquat);
+        const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(wquat);
+
+        const mesh = _makeProjectileMesh(wb.type);
+        // レーザーは進行方向に向ける
+        if (wb.type === 'laser') mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), fwd);
+        mesh.position.copy(wpos).addScaledVector(fwd, 0.9);
+        scene.add(mesh);
+
+        // 放物線系は少し上向きに初速補正
+        const upLift = stats.gravityMult > 0 ? stats.speed * 0.10 : 0;
+        activeProjectiles.push({
+          mesh,
+          vx: fwd.x * stats.speed, vy: fwd.y * stats.speed + upLift, vz: fwd.z * stats.speed,
+          damage: stats.damage,
+          traveled: 0, maxRange: stats.range,
+          gravityMult: stats.gravityMult,
+          weaponType: wb.type,
+        });
+      }
+    }
+
+    function updateProjectiles(dt) {
+      if (!activeProjectiles.length) return;
+      const G = 9.8;
+      const vx = vehicleState.pos.x, vz = vehicleState.pos.z;
+      const pcx = Math.floor(vx / TC_SIZE), pcz = Math.floor(vz / TC_SIZE);
+
+      for (let i = activeProjectiles.length - 1; i >= 0; i--) {
+        const p = activeProjectiles[i];
+        p.vy -= G * p.gravityMult * dt;
+        const step = Math.hypot(p.vx, p.vy, p.vz) * dt;
+        p.mesh.position.x += p.vx * dt;
+        p.mesh.position.y += p.vy * dt;
+        p.mesh.position.z += p.vz * dt;
+        p.traveled += step;
+
+        if (p.traveled > p.maxRange || p.mesh.position.y < -10) {
+          scene.remove(p.mesh); p.mesh.geometry.dispose();
+          activeProjectiles.splice(i, 1); continue;
+        }
+
+        const px = p.mesh.position.x, py = p.mesh.position.y, pz = p.mesh.position.z;
+        let hit = false;
+        for (const [chunkKey, chunk] of terrainChunkMap) {
+          if (hit) break;
+          const [kcx, kcz] = chunkKey.split(',').map(Number);
+          if (Math.abs(kcx - pcx) > 2 || Math.abs(kcz - pcz) > 2) continue;
+          if (chunk.rockPositions) {
+            for (let ri = 0; ri < chunk.rockPositions.length; ri++) {
+              if (destroyedTerrain.has(`${chunkKey}|rock|${ri}`)) continue;
+              const rp = chunk.rockPositions[ri];
+              const dx = px - rp.wx, dy = py - rp.wy, dz = pz - rp.wz;
+              const hr = (rp.r || 0.5) + 0.1;
+              if (dx*dx + dy*dy*0.5 + dz*dz < hr * hr) {
+                destroyTerrainObject(chunkKey, 'rock', ri); hit = true; break;
+              }
+            }
+          }
+          if (!hit && chunk.treePositions) {
+            for (let ti = 0; ti < chunk.treePositions.length; ti++) {
+              if (destroyedTerrain.has(`${chunkKey}|tree|${ti}`)) continue;
+              const tp = chunk.treePositions[ti];
+              const dx = px - tp.wx, dz = pz - tp.wz;
+              if (dx*dx + dz*dz < 0.8 * 0.8 && py > tp.wy && py < tp.wy + 7) {
+                destroyTerrainObject(chunkKey, 'tree', ti); hit = true; break;
+              }
+            }
+          }
+        }
+        if (hit) {
+          scene.remove(p.mesh); p.mesh.geometry.dispose();
+          activeProjectiles.splice(i, 1);
+        }
+      }
+    }
+
+    function clearActiveProjectiles() {
+      for (const p of activeProjectiles) { scene.remove(p.mesh); if (p.mesh.geometry) p.mesh.geometry.dispose(); }
+      activeProjectiles.length = 0;
+    }
+
+    function updateFireBtnVisibility() {
+      const hasWeapon = blocksHistory.some(h => isWeaponType(h.type));
+      document.getElementById('fire-btn').style.display = (hasWeapon && gameMode === 'survival') ? '' : 'none';
+    }
+
     function updateInventoryHUD() {
       document.getElementById('inv-stone').textContent = inventory.stone;
       document.getElementById('inv-wood').textContent  = inventory.wood;
@@ -5291,6 +5573,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       checkPickup();
       checkDrill(dt);
       checkBaseRange();
+      fireWeapons();
+      updateProjectiles(dt);
       _updateTerrainChunks(vehicleState.pos.x, vehicleState.pos.z);
       updateSurvivalCamera();
       updateBiomeAtmosphere(vehicleState.pos.x, vehicleState.pos.z);
