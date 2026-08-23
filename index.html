@@ -1458,7 +1458,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v67';
+    const APP_VERSION = 'v68';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -3327,6 +3327,45 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           && type !== 'connector' && !isDrillType(type) && !isCockpitType(type) && !isWeaponType(type);
     }
 
+    // 荷台の壁・床として有効な通常四角ブロック判定
+    function isPlainBlock(type) {
+      return type !== 'wheel' && !isLargeWheelType(type) && !isCylinderType(type)
+          && type !== 'connector' && !isDrillType(type) && !isWeaponType(type) && !isCockpitType(type);
+    }
+
+    // 荷台判定: 床ブロックの直上が空きで周囲2方向以上に壁ブロックがある空きセル数×2を返す
+    function calcCargoBedCapacity() {
+      const cargoCells = new Set();
+      for (const h of blocksHistory) {
+        if (!isPlainBlock(h.type)) continue;
+        for (const key of h.cells) cargoCells.add(key);
+      }
+
+      const counted = new Set();
+      let total = 0;
+
+      for (const key of cargoCells) {
+        const [x, hy, z] = key.split(',').map(Number);
+        const aboveKey = `${x},${hy + 1},${z}`;
+        if (counted.has(aboveKey)) continue;
+        if (occupiedGrid.has(aboveKey)) continue; // 何かブロックがある
+
+        // 床確認済み (key が直下); 同レベルの壁を数える
+        let walls = 0;
+        if (cargoCells.has(`${x - 1},${hy + 1},${z}`)) walls++;
+        if (cargoCells.has(`${x + 1},${hy + 1},${z}`)) walls++;
+        if (cargoCells.has(`${x},${hy + 1},${z - 1}`)) walls++;
+        if (cargoCells.has(`${x},${hy + 1},${z + 1}`)) walls++;
+
+        if (walls >= 2) {
+          total++;
+          counted.add(aboveKey);
+        }
+      }
+
+      return total * 2;
+    }
+
     function isCockpitType(type) {
       return type === 'cockpit1x1' || type === 'cockpit2x2' || type === 'cockpit2x3' || type === 'cockpit2x4';
     }
@@ -3979,11 +4018,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       showWorldChunks(true);
       buildVehiclePhysics();
 
-      // コクピット積載量を集計
+      // コクピット＋荷台積載量を集計
       totalCargoCapacity = 0;
       blocksHistory.forEach(h => {
         if (isCockpitType(h.type)) totalCargoCapacity += (COCKPIT_CARGO[h.type] || 10);
       });
+      totalCargoCapacity += calcCargoBedCapacity();
       if (totalCargoCapacity === 0) totalCargoCapacity = 10;
       // インベントリ/HUD 初期化
       inventory.stone = 0; inventory.wood = 0;
