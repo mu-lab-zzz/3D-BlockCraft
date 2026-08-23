@@ -1458,7 +1458,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v65';
+    const APP_VERSION = 'v66';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -4898,6 +4898,17 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         }
 
         const px = p.mesh.position.x, py = p.mesh.position.y, pz = p.mesh.position.z;
+
+        // 地面衝突判定
+        const groundY = getTerrainHeight(px, pz);
+        if (py <= groundY + 0.25) {
+          const groundPos = p.mesh.position.clone();
+          groundPos.y = groundY + 0.1;
+          spawnImpactEffect(p.weaponType, groundPos);
+          scene.remove(p.mesh); p.mesh.geometry.dispose();
+          activeProjectiles.splice(i, 1); continue;
+        }
+
         let hit = false;
         for (const [chunkKey, chunk] of terrainChunkMap) {
           if (hit) break;
