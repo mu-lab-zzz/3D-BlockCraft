@@ -1458,7 +1458,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v64';
+    const APP_VERSION = 'v65';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -1705,6 +1705,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     const destroyedTerrain = new Set();  // "cx,cz|rock|i" or "cx,cz|tree|i"
     let _drillCooldown     = 0;
     const activeProjectiles = []; // 飛翔中の弾丸
+    const activeEffects     = []; // 着弾エフェクト
     let currentSteer   = 0;  // ステアリング補間状態 (rad)
     let _flipTimer     = 0;  // 転倒継続秒数（自動回復カウンター）
     const FLIP_AUTO_DELAY = 3.0; // 転倒後の自動回復までの秒数
@@ -3942,6 +3943,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       lastSurvivalTime   = performance.now();
       survivalKeys.w = survivalKeys.s = survivalKeys.a = survivalKeys.d = survivalKeys.fire = false;
       clearActiveProjectiles();
+      clearActiveEffects();
       updateFireBtnVisibility();
 
       // 建築 UI を非表示
@@ -4024,6 +4026,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       saveDestroyedTerrain();
       clearDroppedItems();
       clearActiveProjectiles();
+      clearActiveEffects();
       survivalKeys.fire = false;
       document.getElementById('fire-btn').style.display = 'none';
       document.getElementById('base-range-btn').style.display = 'none';
@@ -4923,6 +4926,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           }
         }
         if (hit) {
+          spawnImpactEffect(p.weaponType, p.mesh.position);
           scene.remove(p.mesh); p.mesh.geometry.dispose();
           activeProjectiles.splice(i, 1);
         }
@@ -4932,6 +4936,191 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function clearActiveProjectiles() {
       for (const p of activeProjectiles) { scene.remove(p.mesh); if (p.mesh.geometry) p.mesh.geometry.dispose(); }
       activeProjectiles.length = 0;
+    }
+
+    // ===== 着弾エフェクト =====
+    function _effMesh(geo, mat) {
+      const m = new THREE.Mesh(geo, mat);
+      m.castShadow = false; m.receiveShadow = false;
+      return m;
+    }
+
+    function spawnImpactEffect(weaponType, hitPos) {
+      const pos = hitPos.clone();
+      const meshes = [];
+
+      if (weaponType === 'rifle') {
+        // 中心フラッシュ球
+        const flash = _effMesh(
+          new THREE.SphereGeometry(0.18, 7, 7),
+          new THREE.MeshStandardMaterial({ color: 0xff8800, emissive: 0xff6600, emissiveIntensity: 2.0, transparent: true, opacity: 1 })
+        );
+        flash.position.copy(pos); scene.add(flash); meshes.push(flash);
+
+        // スパーク(細い棒)を5本ランダム方向に
+        for (let k = 0; k < 5; k++) {
+          const spark = _effMesh(
+            new THREE.BoxGeometry(0.03, 0.03, 0.28),
+            new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0xffaa00, emissiveIntensity: 2.5, transparent: true, opacity: 1 })
+          );
+          spark.position.copy(pos);
+          const phi = Math.random() * Math.PI * 2;
+          const theta = Math.random() * Math.PI;
+          spark.rotation.set(theta, phi, 0);
+          const spd = 2.5 + Math.random() * 2.5;
+          spark.userData.vx = Math.sin(theta) * Math.cos(phi) * spd;
+          spark.userData.vy = Math.cos(theta) * spd;
+          spark.userData.vz = Math.sin(theta) * Math.sin(phi) * spd;
+          scene.add(spark); meshes.push(spark);
+        }
+
+        activeEffects.push({
+          meshes, time: 0, duration: 0.25,
+          update(t, dt) {
+            const inv = 1 - t;
+            meshes[0].scale.setScalar(0.4 + t * 2.2);
+            meshes[0].material.opacity = inv * inv;
+            for (let k = 1; k < meshes.length; k++) {
+              const s = meshes[k];
+              s.position.x += s.userData.vx * dt;
+              s.position.y += s.userData.vy * dt;
+              s.position.z += s.userData.vz * dt;
+              s.material.opacity = inv;
+            }
+          }
+        });
+
+      } else if (weaponType === 'laser') {
+        // 中心白フラッシュ
+        const flash = _effMesh(
+          new THREE.SphereGeometry(0.12, 8, 8),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x00ffee, emissiveIntensity: 3.0, transparent: true, opacity: 1 })
+        );
+        flash.position.copy(pos); scene.add(flash); meshes.push(flash);
+
+        // 拡張リング x 2
+        for (let k = 0; k < 2; k++) {
+          const ring = _effMesh(
+            new THREE.TorusGeometry(0.08, 0.035 - k * 0.01, 8, 20),
+            new THREE.MeshStandardMaterial({ color: 0x00eeff, emissive: 0x00ccff, emissiveIntensity: 2.0, transparent: true, opacity: 1 })
+          );
+          ring.position.copy(pos);
+          ring.rotation.x = (Math.random() - 0.5) * 0.8;
+          ring.rotation.z = (Math.random() - 0.5) * 0.8;
+          scene.add(ring); meshes.push(ring);
+        }
+
+        activeEffects.push({
+          meshes, time: 0, duration: 0.22,
+          update(t) {
+            const inv = 1 - t;
+            meshes[0].scale.setScalar(0.5 + t * 3.5);
+            meshes[0].material.opacity = inv * inv * 2;
+            for (let k = 1; k <= 2; k++) {
+              const scale = 0.3 + t * (1.8 + k * 0.6);
+              meshes[k].scale.setScalar(scale);
+              meshes[k].material.opacity = Math.max(0, inv * 1.5 - k * 0.2);
+            }
+          }
+        });
+
+      } else if (weaponType === 'cannon') {
+        // 爆発球（黄→オレンジ）
+        const blast = _effMesh(
+          new THREE.SphereGeometry(0.4, 10, 10),
+          new THREE.MeshStandardMaterial({ color: 0xff9900, emissive: 0xff5500, emissiveIntensity: 2.5, transparent: true, opacity: 1 })
+        );
+        blast.position.copy(pos); scene.add(blast); meshes.push(blast);
+
+        // 煙球 x 3（暗い灰色、漂う）
+        for (let k = 0; k < 3; k++) {
+          const smoke = _effMesh(
+            new THREE.SphereGeometry(0.35 + k * 0.15, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0x444444, transparent: true, opacity: 0.65, roughness: 1 })
+          );
+          smoke.position.copy(pos);
+          smoke.position.x += (Math.random() - 0.5) * 0.5;
+          smoke.position.z += (Math.random() - 0.5) * 0.5;
+          smoke.userData.vy = 0.8 + Math.random() * 0.6;
+          smoke.userData.vx = (Math.random() - 0.5) * 0.4;
+          smoke.userData.vz = (Math.random() - 0.5) * 0.4;
+          scene.add(smoke); meshes.push(smoke);
+        }
+
+        // デブリ x 6
+        for (let k = 0; k < 6; k++) {
+          const debris = _effMesh(
+            new THREE.BoxGeometry(0.10 + Math.random() * 0.08, 0.10 + Math.random() * 0.06, 0.10 + Math.random() * 0.08),
+            new THREE.MeshStandardMaterial({ color: 0x776655, roughness: 0.9 })
+          );
+          debris.position.copy(pos);
+          const phi = (k / 6) * Math.PI * 2 + Math.random() * 0.8;
+          const spd = 3.5 + Math.random() * 3;
+          debris.userData.vx = Math.cos(phi) * spd;
+          debris.userData.vy = 2.5 + Math.random() * 3.5;
+          debris.userData.vz = Math.sin(phi) * spd;
+          scene.add(debris); meshes.push(debris);
+        }
+
+        activeEffects.push({
+          meshes, time: 0, duration: 1.1,
+          update(t, dt) {
+            const inv = 1 - t;
+            // 爆発球: 0→0.4秒で膨張・消滅
+            const bt = Math.min(t / 0.36, 1);
+            meshes[0].scale.setScalar(0.6 + bt * 5.0);
+            meshes[0].material.opacity = Math.max(0, 1 - bt * bt * 1.6);
+
+            // 煙: 遅れて現れ、漂いながら消える
+            for (let k = 1; k <= 3; k++) {
+              const sm = meshes[k];
+              const st = Math.max(0, (t - 0.08 * k) / 0.92);
+              sm.position.x += sm.userData.vx * dt * 0.5;
+              sm.position.y += sm.userData.vy * dt;
+              sm.position.z += sm.userData.vz * dt * 0.5;
+              sm.userData.vy *= (1 - dt * 0.8);
+              sm.scale.setScalar(0.5 + st * 2.2);
+              sm.material.opacity = Math.max(0, 0.65 * (1 - st * st));
+            }
+
+            // デブリ: 重力つきで飛散
+            const G = 9.8;
+            for (let k = 4; k < meshes.length; k++) {
+              const d = meshes[k];
+              d.userData.vy -= G * dt;
+              d.position.x += d.userData.vx * dt;
+              d.position.y += d.userData.vy * dt;
+              d.position.z += d.userData.vz * dt;
+              d.rotation.x += 3 * dt;
+              d.rotation.z += 2 * dt;
+              if (d.position.y < pos.y - 0.5) {
+                d.userData.vy *= -0.3;
+                d.userData.vx *= 0.6;
+                d.userData.vz *= 0.6;
+                d.position.y = pos.y - 0.5;
+              }
+            }
+          }
+        });
+      }
+    }
+
+    function updateEffects(dt) {
+      for (let i = activeEffects.length - 1; i >= 0; i--) {
+        const ef = activeEffects[i];
+        ef.time += dt;
+        const t = Math.min(ef.time / ef.duration, 1);
+        ef.update(t, dt);
+        if (ef.time >= ef.duration) {
+          ef.meshes.forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
+          activeEffects.splice(i, 1);
+        }
+      }
+    }
+
+    function clearActiveEffects() {
+      activeEffects.forEach(ef => ef.meshes.forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }));
+      activeEffects.length = 0;
     }
 
     function updateFireBtnVisibility() {
@@ -5577,6 +5766,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       checkBaseRange();
       fireWeapons();
       updateProjectiles(dt);
+      updateEffects(dt);
       updateFireBtnVisibility();
       _updateTerrainChunks(vehicleState.pos.x, vehicleState.pos.z);
       updateSurvivalCamera();
