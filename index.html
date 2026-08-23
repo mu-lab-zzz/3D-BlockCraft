@@ -1458,7 +1458,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v62';
+    const APP_VERSION = 'v63';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -3341,7 +3341,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     const WEAPON_STATS = {
       rifle:  { damage: 2, range: 25, cooldown: 0.15, speed: 32, gravityMult: 0.35, projColor: 0xff7700 },
       laser:  { damage: 1, range: 45, cooldown: 0.07, speed: 80, gravityMult: 0,    projColor: 0x00eeff },
-      cannon: { damage: 4, range: 65, cooldown: 0.90, speed: 18, gravityMult: 0.60, projColor: 0xddcc44 },
+      cannon: { damage: 4, range: 65, cooldown: 0.90, speed: 28, gravityMult: 0.22, projColor: 0xddcc44 },
     };
 
     function isLargeWheelType(type) {
@@ -4859,8 +4859,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         mesh.position.copy(wpos).addScaledVector(fwd, 0.9);
         scene.add(mesh);
 
-        // 放物線系は少し上向きに初速補正
-        const upLift = stats.gravityMult > 0 ? stats.speed * 0.10 : 0;
+        // 放物線系は少し上向きに初速補正（射程に応じて計算）
+        const upLift = stats.gravityMult > 0
+          ? 0.5 * 9.8 * stats.gravityMult * (stats.range / stats.speed) * 0.5
+          : 0;
         activeProjectiles.push({
           mesh,
           vx: fwd.x * stats.speed, vy: fwd.y * stats.speed + upLift, vz: fwd.z * stats.speed,
