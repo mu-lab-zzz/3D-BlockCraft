@@ -1458,7 +1458,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v60';
+    const APP_VERSION = 'v61';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -2640,10 +2640,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const geo = new THREE.BoxGeometry(0.98, 0.98, 0.98);
         const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
         const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(0, 0.49, 0);
         const g = new THREE.Group();
         g.add(mesh);
         g.rotation.y = THREE.MathUtils.degToRad(currentRotation);
+        g.material = { color: { setHex: hex => g.traverse(c => { if (c.isMesh) c.material.color.setHex(hex); }) } };
         return g;
       }
       if (isCockpitType(currentBlockType)) return createCockpitPreviewMesh(currentBlockType, currentRotation);
