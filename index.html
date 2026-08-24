@@ -1458,7 +1458,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v68';
+    const APP_VERSION = 'v69';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -3357,7 +3357,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         if (cargoCells.has(`${x},${hy + 1},${z - 1}`)) walls++;
         if (cargoCells.has(`${x},${hy + 1},${z + 1}`)) walls++;
 
-        if (walls >= 2) {
+        if (walls >= 4) {
           total++;
           counted.add(aboveKey);
         }
