@@ -1492,7 +1492,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v80';
+    const APP_VERSION = 'v81';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -6348,7 +6348,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const targetBrake = isBraking ? engineForcePerWheel * 0.075 : 0;
         // スロットルOFF時にブレーキを徐々に増加（前転防止）、ON時は即座に解除
         if (targetBrake > currentBrakeForce) {
-          currentBrakeForce = Math.min(targetBrake, currentBrakeForce + targetBrake * 2.5 * dt);
+          currentBrakeForce = Math.min(targetBrake, currentBrakeForce + targetBrake * 1.0 * dt);
         } else {
           currentBrakeForce = 0;
         }
