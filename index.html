@@ -1492,7 +1492,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v75';
+    const APP_VERSION = 'v76';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -4134,7 +4134,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         craneAnimState.xRetracted = cg.userData.xRetracted;
         craneAnimState.xExtended  = cg.userData.xExtended;
         craneCapacity             = craneAnimState.cfg.capacity;
-        document.getElementById('crane-btn').style.display = '';
+        document.getElementById('crane-btn').style.display = 'block';
       } else {
         craneCapacity = 0;
         document.getElementById('crane-btn').style.display = 'none';
