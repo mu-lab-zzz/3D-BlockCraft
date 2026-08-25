@@ -669,6 +669,25 @@
       -webkit-user-select: none;
     }
     #fire-btn:active, #fire-btn.held { background: rgba(239,68,68,0.95); transform: scale(0.95); }
+    #crane-btn {
+      display: none;
+      pointer-events: auto;
+      background: rgba(40,40,50,0.88);
+      backdrop-filter: blur(8px);
+      color: #fbbf24;
+      border: 1px solid rgba(251,191,36,0.4);
+      padding: 10px 20px;
+      border-radius: 22px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform 0.1s, background 0.15s, color 0.15s;
+      white-space: nowrap;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #crane-btn:active { transform: scale(0.95); }
     #base-inv-panel {
       display: none;
       position: absolute;
@@ -1359,6 +1378,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     <button id="survival-recover-btn" onclick="recoverVehicle()">↩ 回復</button>
     <button id="base-range-btn" onclick="openBaseInventory()">🏪 拠点</button>
     <button id="fire-btn">🔫 射撃</button>
+    <button id="crane-btn" onclick="toggleCrane()" style="display:none">🪝 OFF</button>
     <div class="survival-badge" id="badge-flip">
       <div class="survival-num" id="flip-countdown">3</div>
       <div class="survival-badge-label">転倒 自動回復</div>
@@ -1375,8 +1395,17 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       <div id="inv-items">
         <span class="inv-entry">🪨<span id="inv-stone">0</span></span>
         <span class="inv-entry">🪵<span id="inv-wood">0</span></span>
+        <span class="inv-entry">💎<span id="inv-crystal">0</span></span>
       </div>
       <div class="survival-badge-label">荷物 <span id="inv-cap">0/10</span></div>
+    </div>
+    <div class="survival-badge" id="badge-crane" style="display:none">
+      <div id="crane-cargo-items">
+        <span class="inv-entry">🪨<span id="crane-rock">0</span></span>
+        <span class="inv-entry">🪵<span id="crane-wood">0</span></span>
+        <span class="inv-entry">💎<span id="crane-crystal">0</span></span>
+      </div>
+      <div class="survival-badge-label">🪝荷台 <span id="crane-cap">0/0</span> ×3</div>
     </div>
   </div>
   <div id="pickup-toast"></div>
@@ -1395,6 +1424,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         <div class="base-inv-icon">🪵</div>
         <div class="base-inv-name">木材</div>
         <div class="base-inv-count" id="base-wood">0</div>
+      </div>
+      <div class="base-inv-cell">
+        <div class="base-inv-icon">💎</div>
+        <div class="base-inv-name">水晶</div>
+        <div class="base-inv-count" id="base-crystal">0</div>
       </div>
     </div>
     <div id="base-inv-total">合計 <span id="base-total">0</span> 個</div>
@@ -1458,7 +1492,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v69';
+    const APP_VERSION = 'v72';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -1691,7 +1725,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // スポーン店舗の中心座標（buildSpawnShop: BX=8, BZ=8, 9×7）
     const BASE_POS   = { x: 12.5, z: 11.0 };
     const BASE_RANGE = 12.0; // 自動収納 & ボタン表示半径
-    const baseInventory = { stone: 0, wood: 0 };
+    const baseInventory = { stone: 0, wood: 0, crystal: 0 };
     let _inBaseRange      = false;
     let _baseStoreTimer   = 0;
 
@@ -1700,10 +1734,19 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     const DRILL_RANGE   = 2.4;  // 破壊検知半径（ブロック単位）
     const PICKUP_RANGE  = 4.0;  // アイテム自動回収半径
     let totalCargoCapacity = 10;
-    const inventory        = { stone: 0, wood: 0 };
+    const inventory        = { stone: 0, wood: 0, crystal: 0 };
     const droppedItems     = [];         // { mesh, type: 'stone'|'wood' }
     const destroyedTerrain = new Set();  // "cx,cz|rock|i" or "cx,cz|tree|i"
     let _drillCooldown     = 0;
+    let craneCargo    = { rock: 0, wood: 0, crystal: 0 };
+    let craneCapacity = 0;
+    let craneActive   = false;
+    const craneAnimState = {
+      phase: 'idle', t: 0, target: null, grabMesh: null,
+      startAngle: 0, targetAngle: 0, dropDist: 1,
+      groupRef: null, armGroupRef: null, cfg: null,
+      xRetracted: 0, xExtended: 0,
+    };
     const activeProjectiles = []; // 飛翔中の弾丸
     const activeEffects     = []; // 着弾エフェクト
     let currentSteer   = 0;  // ステアリング補間状態 (rad)
@@ -1765,20 +1808,27 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     dirLight.position.set(25, 40, 25);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.set(2048, 2048);
+    dirLight.shadow.camera.left   = -30;
+    dirLight.shadow.camera.right  =  30;
+    dirLight.shadow.camera.top    =  30;
+    dirLight.shadow.camera.bottom = -30;
+    dirLight.shadow.camera.near   =  0.5;
+    dirLight.shadow.camera.far    =  200;
+    dirLight.shadow.bias          = -0.0008;
     scene.add(dirLight);
 
     // 床 (50x50)
     const GRID_SIZE = 50;
     const planeGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
-    const planeMat = new THREE.MeshStandardMaterial({ color: 0x2b2d35, roughness: 0.8 });
+    const planeMat = new THREE.MeshStandardMaterial({ color: 0x2b2d35, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 });
     const plane = new THREE.Mesh(planeGeo, planeMat);
     plane.rotation.x = -Math.PI / 2;
-    plane.position.y = -0.001; // ブロック底面（y=0）との表示競合（めり込み・ちらつき）を防ぐため微修正
+    plane.position.y = -0.05;
     plane.receiveShadow = true;
     scene.add(plane);
 
     const gridHelper = new THREE.GridHelper(GRID_SIZE, GRID_SIZE, 0x555566, 0x333344);
-    gridHelper.position.y = 0;
+    gridHelper.position.y = -0.04;
     scene.add(gridHelper);
 
     // 地形はチャンクストリーミングで動的生成 — 静的メッシュなし
@@ -1826,6 +1876,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (isLargeWheelType(type)) return { w: 1, d: 1, h: 1 };
       if (isDrillType(type)) return { w: 1, d: 1, h: 1 };
       if (isWeaponType(type)) return { w: 1, d: 1, h: 1 };
+      if (isCraneType(type)) return { w: 1, d: 1, h: 1 };
       if (type === 'cyl' || type === 'cyl05') return { w: 1, d: 1, h: 1 };
       if (type === 'cylp' || type === 'cyl05p') return { w: 1, d: 1, h: 0.5 };
       if (type === 'connector') return { w: 1, d: 1, h: 1 };
@@ -1862,6 +1913,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (type === 'rifle')  return 'ライフル';
       if (type === 'laser')  return 'レーザー';
       if (type === 'cannon') return '大砲';
+      if (isCraneType(type)) { const g = getCraneGrade(type); return `クレーン Mk.${['Ⅰ','Ⅱ','Ⅲ','Ⅳ','Ⅴ'][g-1]}`; }
       const cylSize = getLargeCylSize(type);
       if (cylSize !== null) return `円柱${cylSize}${type.endsWith('p') ? '薄' : ''}`;
       if (isCockpitType(type)) {
@@ -2189,6 +2241,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       else if (type === 'laser')     { group = createLaserMesh(color, rot); }
       else if (type === 'cannon')    { group = createCannonMesh(color, rot); }
       else if (isCockpitType(type))  group = createCockpitMesh(type, color, rot);
+      else if (isCraneType(type))    { group = createCraneMesh(type, color, rot); }
       else {
         const dim = getBlockDimensions(type, rot);
         group = new THREE.Group();
@@ -2648,6 +2701,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         return g;
       }
       if (isCockpitType(currentBlockType)) return createCockpitPreviewMesh(currentBlockType, currentRotation);
+      if (isCraneType(currentBlockType)) {
+        const g = new THREE.Group();
+        const mat = new THREE.MeshBasicMaterial({ color:0x00ff00, transparent:true, opacity:0.38 });
+        g.add(new THREE.Mesh(new THREE.BoxGeometry(0.97,0.97,0.97), mat));
+        g.material = { color:{ setHex: hex => g.traverse(c => { if (c.isMesh) c.material.color.setHex(hex); }) } };
+        if (currentRotation) g.rotation.y = currentRotation * Math.PI / 180;
+        return g;
+      }
       const dim = getBlockDimensions(currentBlockType, currentRotation);
       const geo = new THREE.BoxGeometry(dim.w - 0.02, dim.h - 0.02, dim.d - 0.02);
       const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
@@ -3324,13 +3385,13 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     // tilt(横倒し)を適用できる通常ブロック型
     function isTiltableBlock(type) {
       return !isLargeWheelType(type) && type !== 'wheel' && !isCylinderType(type)
-          && type !== 'connector' && !isDrillType(type) && !isCockpitType(type) && !isWeaponType(type);
+          && type !== 'connector' && !isDrillType(type) && !isCockpitType(type) && !isWeaponType(type) && !isCraneType(type);
     }
 
     // 荷台の壁・床として有効な通常四角ブロック判定
     function isPlainBlock(type) {
       return type !== 'wheel' && !isLargeWheelType(type) && !isCylinderType(type)
-          && type !== 'connector' && !isDrillType(type) && !isWeaponType(type) && !isCockpitType(type);
+          && type !== 'connector' && !isDrillType(type) && !isWeaponType(type) && !isCockpitType(type) && !isCraneType(type);
     }
 
     // 荷台判定: 床ブロックの直上が空きで周囲2方向以上に壁ブロックがある空きセル数×2を返す
@@ -3377,6 +3438,9 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function isWeaponType(type) {
       return type === 'rifle' || type === 'laser' || type === 'cannon';
     }
+
+    function isCraneType(type) { return /^crane[1-5]$/.test(type); }
+    function getCraneGrade(type) { return isCraneType(type) ? parseInt(type.slice(-1)) : 0; }
 
     const WEAPON_STATS = {
       rifle:  { damage: 2, range: 25, cooldown: 0.15, speed: 32, gravityMult: 0.35, projColor: 0xff7700 },
@@ -3716,6 +3780,13 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         { type: 'drillB',    label: 'ロータリー',title: 'ロータリービット式ドリル（3ブロック長）' },
         { type: 'drillC',    label: 'ランス',    title: 'ランス式ドリル（3ブロック長）' },
       ]);
+      addSection('🪝 クレーン荷台（1基まで）', [
+        { type: 'crane1', label: 'Mk.Ⅰ',  title: '範囲5m 積載4 低速' },
+        { type: 'crane2', label: 'Mk.Ⅱ',  title: '範囲7m 積載7' },
+        { type: 'crane3', label: 'Mk.Ⅲ', title: '範囲10m 積載12' },
+        { type: 'crane4', label: 'Mk.Ⅳ',  title: '範囲13m 積載18 高速' },
+        { type: 'crane5', label: 'Mk.Ⅴ',  title: '範囲17m 積載26 超高速' },
+      ]);
     }
 
     function selectBlockType(type, btn) {
@@ -3771,6 +3842,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function executeAction() {
       if (mode === 'add') {
         if (!isCanPlace || !previewMesh.visible) return;
+        // クレーンは1基のみ
+        if (isCraneType(currentBlockType) && blocksHistory.some(h => isCraneType(h.type))) {
+          alert('クレーンは1基のみ設置できます');
+          return;
+        }
 
         const dim = getBlockDimensions(currentBlockType, currentRotation);
         const group = createBlockMesh(currentBlockType, currentColor, currentRotation, activeTilt);
@@ -4026,8 +4102,31 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       totalCargoCapacity += calcCargoBedCapacity();
       if (totalCargoCapacity === 0) totalCargoCapacity = 10;
       // インベントリ/HUD 初期化
-      inventory.stone = 0; inventory.wood = 0;
+      inventory.stone = 0; inventory.wood = 0; inventory.crystal = 0;
+      craneCargo = { rock:0, wood:0, crystal:0 };
+      craneActive = false;
+      craneAnimState.phase = 'idle'; craneAnimState.t = 0;
+      craneAnimState.target = null; craneAnimState.grabMesh = null;
+      craneAnimState.groupRef = null; craneAnimState.armGroupRef = null;
+      craneAnimState.cfg = null;
+
+      // クレーンブロック検索
+      const craneH = blocksHistory.find(h => isCraneType(h.type));
+      if (craneH) {
+        const cg = craneH.group;
+        craneAnimState.groupRef   = cg;
+        craneAnimState.armGroupRef= cg.getObjectByName('craneArm');
+        craneAnimState.cfg        = CRANE_CONFIGS[craneH.type];
+        craneAnimState.xRetracted = cg.userData.xRetracted;
+        craneAnimState.xExtended  = cg.userData.xExtended;
+        craneCapacity             = craneAnimState.cfg.capacity;
+        document.getElementById('crane-btn').style.display = '';
+      } else {
+        craneCapacity = 0;
+        document.getElementById('crane-btn').style.display = 'none';
+      }
       updateInventoryHUD();
+      updateCraneCargo();
 
 
       // サバイバル UI を表示
@@ -4067,6 +4166,17 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       clearDroppedItems();
       clearActiveProjectiles();
       clearActiveEffects();
+      // クレーン状態リセット
+      if (craneAnimState.grabMesh && craneAnimState.armGroupRef) {
+        craneAnimState.armGroupRef.getObjectByName('craneHook')?.remove(craneAnimState.grabMesh);
+      }
+      craneAnimState.phase = 'idle'; craneAnimState.grabMesh = null;
+      craneAnimState.groupRef = null; craneAnimState.armGroupRef = null;
+      craneAnimState.cfg = null;
+      craneCargo = { rock:0, wood:0, crystal:0 };
+      craneActive = false;
+      craneCapacity = 0;
+      document.getElementById('crane-btn').style.display = 'none';
       survivalKeys.fire = false;
       document.getElementById('fire-btn').style.display = 'none';
       document.getElementById('base-range-btn').style.display = 'none';
@@ -4523,6 +4633,406 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       wheelInfosMeta = [];
     }
 
+    // ===== クレーン荷台 =====
+    const CRANE_CONFIGS = {
+      crane1: { grade:1, range:5,  speed:1.8, capacity:4,  armLen:2.0 },
+      crane2: { grade:2, range:7,  speed:1.4, capacity:7,  armLen:2.8 },
+      crane3: { grade:3, range:10, speed:1.0, capacity:12, armLen:3.8 },
+      crane4: { grade:4, range:13, speed:0.75,capacity:18, armLen:5.0 },
+      crane5: { grade:5, range:17, speed:0.55,capacity:26, armLen:6.5 },
+    };
+
+    function createCraneMesh(type, color, rot) {
+      const cfg = CRANE_CONFIGS[type];
+      const G = new THREE.Group();
+      const grade = cfg.grade;
+
+      const bW  = 0.85 + grade * 0.16;
+      const bD  = bW * 1.3;
+      const bedH = 0.16, wH = 0.24, wT = 0.06;
+      const tH  = 0.5 + grade * 0.4;
+      const tW  = 0.10 + grade * 0.018;
+      const aL  = cfg.armLen;
+      const innerL = aL * 0.42;
+      const outerL = aL * 0.62;
+      const xR  = tW / 2 + innerL;          // hook X retracted
+      const xE  = xR + outerL * 0.78;       // hook X extended
+
+      const matC = new THREE.MeshStandardMaterial({ color, roughness:0.40, metalness:0.52 });
+      const matD = new THREE.MeshStandardMaterial({ color:0x1e1e24, roughness:0.65, metalness:0.60 });
+      const matB = new THREE.MeshStandardMaterial({ color:0x48484f, roughness:0.75, metalness:0.35 });
+
+      // Bed floor
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(bW, bedH, bD), matB);
+      floor.position.y = bedH / 2; floor.castShadow = true;
+      G.add(floor);
+
+      // 4 walls (low so cargo is visible from above)
+      [
+        [new THREE.BoxGeometry(wT,wH,bD), -bW/2+wT/2, bedH+wH/2, 0],
+        [new THREE.BoxGeometry(wT,wH,bD),  bW/2-wT/2, bedH+wH/2, 0],
+        [new THREE.BoxGeometry(bW,wH,wT), 0, bedH+wH/2,  bD/2-wT/2],
+        [new THREE.BoxGeometry(bW,wH,wT), 0, bedH+wH/2, -bD/2+wT/2],
+      ].forEach(([geo,x,y,z]) => {
+        const w = new THREE.Mesh(geo, matD); w.position.set(x,y,z); G.add(w);
+      });
+
+      // Tower (center of block)
+      const twr = new THREE.Mesh(new THREE.BoxGeometry(tW,tH,tW), matC);
+      twr.position.set(0, bedH + tH/2, 0); twr.castShadow = true;
+      G.add(twr);
+
+      // Cab at tower top
+      const cab = new THREE.Mesh(new THREE.BoxGeometry(tW*2.2, tW*1.6, tW*2.2), matC);
+      cab.position.set(0, bedH + tH + tW*0.8, 0);
+      G.add(cab);
+
+      // Arm group (pivot at tower top, arm extends in +X at rotation=0)
+      const armG = new THREE.Group();
+      armG.name = 'craneArm';
+      armG.position.set(0, bedH + tH, 0);
+      G.add(armG);
+
+      // Counterweight (-X)
+      const cwL = aL * 0.18;
+      const cwBeam = new THREE.Mesh(new THREE.BoxGeometry(cwL,0.09,0.09), matD);
+      cwBeam.position.set(-tW/2 - cwL/2, 0.05, 0); armG.add(cwBeam);
+      const cwBlock = new THREE.Mesh(new THREE.BoxGeometry(0.15+grade*0.02, 0.22+grade*0.02, 0.15+grade*0.02), matD);
+      cwBlock.position.set(-tW/2 - cwL, 0.04, 0); armG.add(cwBlock);
+
+      // Inner beam (+X)
+      const ibMesh = new THREE.Mesh(new THREE.BoxGeometry(innerL,0.09,0.09), matC);
+      ibMesh.position.set(tW/2 + innerL/2, 0, 0); armG.add(ibMesh);
+
+      // Outer beam (extender, starts retracted: tip at xR)
+      const obMesh = new THREE.Mesh(new THREE.BoxGeometry(outerL, 0.072, 0.072), matC);
+      obMesh.name = 'craneArmOuter';
+      obMesh.position.set(xR - outerL/2, 0, 0);
+      armG.add(obMesh);
+
+      // Hook group (slides in X, descends in Y)
+      const hookG = new THREE.Group();
+      hookG.name = 'craneHook';
+      hookG.position.set(xR, 0, 0);
+      armG.add(hookG);
+
+      const cableH = 0.35;
+      const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,cableH,4), matD);
+      cable.name = 'craneCable';
+      cable.position.y = -cableH / 2;
+      hookG.add(cable);
+
+      const hookSph = new THREE.Mesh(new THREE.SphereGeometry(0.06+grade*0.01, 8, 6), matD);
+      hookSph.name = 'craneHookSph';
+      hookSph.position.y = -cableH - 0.07;
+      hookG.add(hookSph);
+
+      // Cargo contents group (items show here)
+      const cargoG = new THREE.Group();
+      cargoG.name = 'craneCargo';
+      cargoG.position.set(0, bedH + 0.02, 0);
+      G.add(cargoG);
+
+      G.userData.craneType  = type;
+      G.userData.xRetracted = xR;
+      G.userData.xExtended  = xE;
+      G.userData.outerL     = outerL;
+      G.userData.cableH     = cableH;
+
+      if (rot) G.rotation.y = rot * Math.PI / 2;
+      return G;
+    }
+
+    function _makeGrabbedMesh(type) {
+      let geo, mat;
+      if (type === 'rock') {
+        geo = new THREE.DodecahedronGeometry(0.18, 0);
+        mat = new THREE.MeshStandardMaterial({ color:0x9a9a9a, roughness:0.7 });
+      } else if (type === 'tree') {
+        geo = new THREE.BoxGeometry(0.14, 0.28, 0.14);
+        mat = new THREE.MeshStandardMaterial({ color:0x6b3a1f, roughness:0.8 });
+      } else {
+        geo = new THREE.OctahedronGeometry(0.14, 0);
+        mat = new THREE.MeshStandardMaterial({ color:0x88ddff, emissive:0x2266aa, emissiveIntensity:0.7, transparent:true, opacity:0.88 });
+      }
+      return new THREE.Mesh(geo, mat);
+    }
+
+    function _updateCargoBedVisual(craneGroup) {
+      if (!craneGroup) return;
+      const cargoG = craneGroup.getObjectByName('craneCargo');
+      if (!cargoG) return;
+      while (cargoG.children.length > 0) {
+        const c = cargoG.children[0];
+        if (c.geometry) c.geometry.dispose();
+        cargoG.remove(c);
+      }
+      const cfg = CRANE_CONFIGS[craneGroup.userData.craneType];
+      if (!cfg) return;
+      const bW = 0.85 + cfg.grade * 0.16, bD = bW * 1.3;
+      const items = [];
+      for (let i = 0; i < craneCargo.rock;    i++) items.push('rock');
+      for (let i = 0; i < craneCargo.wood;    i++) items.push('wood');
+      for (let i = 0; i < craneCargo.crystal; i++) items.push('crystal');
+      const n = Math.min(items.length, cfg.capacity);
+      const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+      items.slice(0, n).forEach((tp, i) => {
+        const m = _makeGrabbedMesh(tp);
+        m.scale.setScalar(0.65);
+        const col = i % cols, row = Math.floor(i / cols);
+        const rows = Math.ceil(n / cols);
+        m.position.set(
+          (col - (cols-1)/2) * (bW / Math.max(cols,1)),
+          0.12,
+          (row - (rows-1)/2) * (bD / Math.max(rows,1))
+        );
+        cargoG.add(m);
+      });
+    }
+
+    function updateCraneCargo() {
+      const el = document.getElementById('badge-crane');
+      if (!el) return;
+      const hasCrane = craneCapacity > 0;
+      el.style.display = hasCrane ? '' : 'none';
+      if (!hasCrane) return;
+      document.getElementById('crane-rock').textContent    = craneCargo.rock;
+      document.getElementById('crane-wood').textContent    = craneCargo.wood;
+      document.getElementById('crane-crystal').textContent = craneCargo.crystal;
+      const total = craneCargo.rock + craneCargo.wood + craneCargo.crystal;
+      document.getElementById('crane-cap').textContent = `${total}/${craneCapacity}`;
+    }
+
+    function toggleCrane() {
+      craneActive = !craneActive;
+      const btn = document.getElementById('crane-btn');
+      if (btn) {
+        btn.textContent = craneActive ? '🪝 ON' : '🪝 OFF';
+        btn.style.background = craneActive ? 'rgba(251,191,36,0.92)' : '';
+        btn.style.color      = craneActive ? '#1a1a00' : '';
+      }
+    }
+
+    function updateCrane(dt) {
+      const st = craneAnimState;
+      if (!st.armGroupRef || !st.cfg) return;
+
+      const armG    = st.armGroupRef;
+      const outerBm = armG.getObjectByName('craneArmOuter');
+      const hookG   = armG.getObjectByName('craneHook');
+      const cable   = hookG?.getObjectByName('craneCable');
+      if (!outerBm || !hookG) return;
+
+      const cfg = st.cfg;
+      const xR  = st.xRetracted, xE = st.xExtended;
+      const outerL = cfg.armLen * 0.62;
+      const sp  = cfg.speed;
+      const _lr = (a,b,t) => a+(b-a)*t;
+      const _ez = (t) => t<0.5 ? 2*t*t : -1+(4-2*t)*t;
+      const _p  = (dur) => Math.min(st.t / dur, 1);
+
+      if (st.phase === 'idle') {
+        if (!craneActive) return;
+        const total = craneCargo.rock + craneCargo.wood + craneCargo.crystal;
+        if (total >= cfg.capacity) return;
+
+        const cranePos = new THREE.Vector3();
+        st.groupRef.getWorldPosition(cranePos);
+
+        let best = null, bestD2 = cfg.range * cfg.range;
+        const cxC = Math.floor(cranePos.x / TC_SIZE), czC = Math.floor(cranePos.z / TC_SIZE);
+
+        for (let dcx = -1; dcx <= 1; dcx++) for (let dcz = -1; dcz <= 1; dcz++) {
+          const chunkKey = _tcKey(cxC+dcx, czC+dcz);
+          const chunk = terrainChunkMap.get(chunkKey);
+          if (!chunk) continue;
+
+          const scan = (positions, type) => {
+            if (!positions) return;
+            for (let i = 0; i < positions.length; i++) {
+              if (destroyedTerrain.has(`${chunkKey}|${type}|${i}`)) continue;
+              const p = positions[i];
+              const dx = p.wx - cranePos.x, dz = p.wz - cranePos.z;
+              const d2 = dx*dx + dz*dz;
+              if (d2 < bestD2) {
+                bestD2 = d2;
+                best = { chunkKey, type, idx:i, wx:p.wx, wy:(p.wy != null ? p.wy : getTerrainHeight(p.wx,p.wz)), wz:p.wz };
+              }
+            }
+          };
+          scan(chunk.rockPositions,    'rock');
+          scan(chunk.treePositions,    'tree');
+          scan(chunk.crystalPositions, 'crystal');
+        }
+
+        if (!best) return;
+
+        const localTarget = st.groupRef.worldToLocal(new THREE.Vector3(best.wx, cranePos.y, best.wz));
+        st.target      = best;
+        st.phase       = 'swing_to';
+        st.t           = 0;
+        st.startAngle  = armG.rotation.y;
+        st.targetAngle = Math.atan2(localTarget.z, localTarget.x);
+        return;
+      }
+
+      st.t += dt;
+
+      if (st.phase === 'swing_to') {
+        const p = _p(sp);
+        armG.rotation.y = _lr(st.startAngle, st.targetAngle, _ez(p));
+        if (p >= 1) { st.phase = 'extend'; st.t = 0; }
+      }
+      else if (st.phase === 'extend') {
+        const p = _p(sp * 0.55);
+        const x = _lr(xR, xE, _ez(p));
+        hookG.position.x  = x;
+        outerBm.position.x = x - outerL/2;
+        if (p >= 1) {
+          const armPos = new THREE.Vector3();
+          armG.getWorldPosition(armPos);
+          st.dropDist = Math.max(0.5, armPos.y - st.target.wy - 0.05);
+          st.phase = 'lower'; st.t = 0;
+        }
+      }
+      else if (st.phase === 'lower') {
+        const p = _p(sp * 0.65);
+        hookG.position.y = _lr(0, -st.dropDist, _ez(p));
+        if (cable) {
+          const h = _lr(0.35, 0.35 + st.dropDist, _ez(p));
+          cable.scale.y = h / 0.35;
+          cable.position.y = -h / 2;
+        }
+        if (p >= 1) { st.phase = 'grab'; st.t = 0; }
+      }
+      else if (st.phase === 'grab') {
+        const hookSph = hookG.getObjectByName('craneHookSph');
+        if (hookSph) hookSph.scale.setScalar(1 + Math.abs(Math.sin(st.t * 18)) * 0.35 * Math.max(0, 1-st.t*1.8));
+        if (st.t > 0.45 && !st.grabMesh) {
+          st.grabMesh = _makeGrabbedMesh(st.target.type);
+          st.grabMesh.position.y = -st.dropDist - 0.42;
+          hookG.add(st.grabMesh);
+          destroyTerrainObject(st.target.chunkKey, st.target.type, st.target.idx, true);
+        }
+        if (st.t > 0.8) { st.phase = 'raise'; st.t = 0; }
+      }
+      else if (st.phase === 'raise') {
+        const p = _p(sp * 0.65);
+        hookG.position.y = _lr(-st.dropDist, 0, _ez(p));
+        if (cable) {
+          const h = _lr(0.35 + st.dropDist, 0.35, _ez(p));
+          cable.scale.y = h / 0.35;
+          cable.position.y = -h / 2;
+        }
+        if (p >= 1) { st.phase = 'swing_back'; st.t = 0; }
+      }
+      else if (st.phase === 'swing_back') {
+        const p = _p(sp * 0.75);
+        armG.rotation.y = _lr(st.targetAngle, 0, _ez(p));
+        const x = _lr(xE, xR, _ez(p));
+        hookG.position.x  = x;
+        outerBm.position.x = x - outerL/2;
+        if (p >= 1) { st.phase = 'deposit'; st.t = 0; }
+      }
+      else if (st.phase === 'deposit') {
+        if (st.t > 0.30) {
+          craneCargo[st.target.type] = (craneCargo[st.target.type] || 0) + 1;
+          if (st.grabMesh) {
+            hookG.remove(st.grabMesh);
+            if (st.grabMesh.geometry) st.grabMesh.geometry.dispose();
+            st.grabMesh = null;
+          }
+          _updateCargoBedVisual(st.groupRef);
+          updateCraneCargo();
+          st.phase = 'idle'; st.t = 0; st.target = null;
+        }
+      }
+    }
+
+    // ===== バイオーム水晶 =====
+    const CRYSTAL_CONFIGS = {
+      grassland: {
+        color: 0x2ECC71, emissive: 0x18824A, emiInt: 0.35,
+        countMin: 2, countMax: 5,
+        prisms: [
+          { dx:-0.22, dz: 0.00, r:0.055, h:0.90, tilt:-4 },
+          { dx: 0.00, dz: 0.00, r:0.075, h:1.25, tilt: 0 },
+          { dx: 0.21, dz: 0.08, r:0.065, h:1.00, tilt: 4 },
+          { dx:-0.11, dz:-0.08, r:0.045, h:0.62, tilt:-6 },
+        ]
+      },
+      forest: {
+        color: 0x9B59B6, emissive: 0x5C2880, emiInt: 0.40,
+        countMin: 2, countMax: 5,
+        prisms: [
+          { dx:-0.27, dz: 0.10, r:0.050, h:0.70, tilt:-8 },
+          { dx:-0.11, dz: 0.00, r:0.065, h:0.90, tilt:-2 },
+          { dx: 0.05, dz:-0.05, r:0.055, h:0.84, tilt: 3 },
+          { dx: 0.20, dz: 0.08, r:0.060, h:0.75, tilt: 7 },
+          { dx:-0.20, dz:-0.11, r:0.040, h:0.50, tilt:-10 },
+        ]
+      },
+      desert: {
+        color: 0xE67E22, emissive: 0xA04810, emiInt: 0.30,
+        countMin: 1, countMax: 4,
+        prisms: [
+          { dx:-0.20, dz: 0.05, r:0.120, h:0.65, tilt:-5 },
+          { dx: 0.13, dz:-0.05, r:0.140, h:0.75, tilt: 3 },
+          { dx:-0.04, dz:-0.12, r:0.090, h:0.46, tilt:-2 },
+        ]
+      },
+      canyon: {
+        color: 0xC0392B, emissive: 0x7A1A14, emiInt: 0.35,
+        countMin: 2, countMax: 6,
+        prisms: [
+          { dx:-0.26, dz: 0.05, r:0.040, h:1.10, tilt:-9 },
+          { dx:-0.08, dz:-0.05, r:0.050, h:0.90, tilt: 5 },
+          { dx: 0.08, dz: 0.08, r:0.035, h:1.28, tilt:-3 },
+          { dx: 0.24, dz: 0.00, r:0.045, h:0.77, tilt: 8 },
+        ]
+      },
+      mountain: {
+        color: 0xA8C4E0, emissive: 0x6888A8, emiInt: 0.40,
+        countMin: 1, countMax: 3,
+        prisms: [
+          { dx:-0.15, dz: 0.00, r:0.055, h:1.30, tilt:-2 },
+          { dx: 0.10, dz: 0.05, r:0.065, h:1.10, tilt: 4 },
+          { dx:-0.02, dz:-0.08, r:0.045, h:0.88, tilt: 0 },
+        ]
+      },
+      tundra: {
+        color: 0x5DADE2, emissive: 0x2060A8, emiInt: 0.45,
+        countMin: 2, countMax: 5,
+        prisms: [
+          { dx:-0.24, dz: 0.00, r:0.135, h:0.40, tilt:-13 },
+          { dx: 0.06, dz: 0.08, r:0.155, h:0.33, tilt: 11 },
+          { dx:-0.08, dz:-0.10, r:0.110, h:0.50, tilt: -6 },
+          { dx: 0.20, dz:-0.05, r:0.090, h:0.36, tilt: 14 },
+        ]
+      },
+    };
+
+    function _createCrystalCluster(cfg) {
+      const g = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({
+        color: cfg.color, emissive: cfg.emissive, emissiveIntensity: cfg.emiInt,
+        roughness: 0.20, metalness: 0.05, transparent: true, opacity: 0.88,
+      });
+      for (const p of cfg.prisms) {
+        const bH = p.h * 0.68, tH = p.h * 0.32;
+        const sg = new THREE.Group();
+        sg.position.set(p.dx, 0, p.dz || 0);
+        sg.rotation.z = THREE.MathUtils.degToRad(p.tilt || 0);
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(p.r, p.r * 1.05, bH, 6, 1), mat);
+        body.position.y = bH / 2; body.castShadow = true;
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(p.r, tH, 6, 1), mat);
+        tip.position.y = bH + tH / 2; tip.castShadow = true;
+        sg.add(body, tip);
+        g.add(sg);
+      }
+      return g;
+    }
+
     // ===== チャンクストリーミング: チャンク生成 / 解放 / 更新 =====
     function _buildTerrainChunk(cx, cz) {
       const ox = cx * TC_SIZE;
@@ -4693,10 +5203,36 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         scene.add(iCactus); objects.push(iCactus);
       }
 
+      // 水晶クラスター（1スポーン = 1グループ）
+      const crystalMeshes    = [];
+      const crystalPositions = [];
+      const rngX = mulberry32((seed ^ 0xC0FFEE1) >>> 0);
+      for (let i = 0; i < 10; i++) {
+        const wx = ox + rngX() * TC_SIZE, wz2 = oz + rngX() * TC_SIZE;
+        const bwC = _biomeWeights(wx, wz2);
+        const domC = Object.entries(bwC).sort((a, b) => b[1] - a[1])[0][0];
+        const cfg = CRYSTAL_CONFIGS[domC];
+        if (!cfg) { rngX(); continue; }
+        // 出現確率: grassland=20% 外周=50%
+        if (rngX() > (domC === 'grassland' ? 0.20 : 0.50)) continue;
+        const wy = getTerrainHeight(wx, wz2);
+        const cidx = crystalMeshes.length;
+        const alive = !destroyedTerrain.has(`${_chunkKey}|crystal|${cidx}`);
+        const clusterG = _createCrystalCluster(cfg);
+        clusterG.position.set(wx, wy - 0.08, wz2);
+        clusterG.rotation.y = rngX() * Math.PI * 2;
+        clusterG.visible = alive && (gameMode === 'survival');
+        scene.add(clusterG);
+        objects.push(clusterG);
+        crystalMeshes.push(clusterG);
+        crystalPositions.push({ wx, wy, wz: wz2, r: 0.55 });
+      }
+
       terrainChunkMap.set(_tcKey(cx,cz), {
         mesh, physicsBody, objects, physicsBodies,
         rockMesh: iRock, rockPositions, rockPhysBodies,
         treeMeshes, treePositions,
+        crystalMeshes, crystalPositions,
       });
     }
 
@@ -4718,7 +5254,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     // ===== 採掘: 地形オブジェクト破壊 =====
     let _pickupToastTimer = 0;
-    function destroyTerrainObject(chunkKey, type, idx) {
+    function destroyTerrainObject(chunkKey, type, idx, noDrop = false) {
       const dkey = `${chunkKey}|${type}|${idx}`;
       if (destroyedTerrain.has(dkey)) return;
       destroyedTerrain.add(dkey);
@@ -4737,36 +5273,52 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           if (pi >= 0) chunk.physicsBodies[pi] = null;
         }
         const p = chunk.rockPositions && chunk.rockPositions[idx];
-        if (p) spawnDroppedItem('stone', p.wx, p.wy, p.wz);
+        if (p && !noDrop) spawnDroppedItem('stone', p.wx, p.wy, p.wz);
       } else if (type === 'tree') {
         const g = chunk.treeMeshes && chunk.treeMeshes[idx];
         if (g) g.visible = false;
         const p = chunk.treePositions && chunk.treePositions[idx];
-        if (p) spawnDroppedItem('wood', p.wx, p.wy, p.wz);
+        if (p && !noDrop) spawnDroppedItem('wood', p.wx, p.wy, p.wz);
+      } else if (type === 'crystal') {
+        const g = chunk.crystalMeshes && chunk.crystalMeshes[idx];
+        if (g) g.visible = false;
+        const p = chunk.crystalPositions && chunk.crystalPositions[idx];
+        if (p && !noDrop) spawnDroppedItem('crystal', p.wx, p.wy + 0.3, p.wz);
       }
     }
 
     function spawnDroppedItem(itemType, wx, wy, wz) {
-      const color = itemType === 'stone' ? 0x9a9a9a : 0x8b5e3c;
-      const mat   = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
-      const geo   = itemType === 'stone'
-        ? new THREE.DodecahedronGeometry(0.28, 0)
-        : new THREE.BoxGeometry(0.32, 0.22, 0.42);
-      const mesh  = new THREE.Mesh(geo, mat);
+      let geo, mat;
+      if (itemType === 'stone') {
+        geo = new THREE.DodecahedronGeometry(0.28, 0);
+        mat = new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 0.7 });
+      } else if (itemType === 'wood') {
+        geo = new THREE.BoxGeometry(0.32, 0.22, 0.42);
+        mat = new THREE.MeshStandardMaterial({ color: 0x8b5e3c, roughness: 0.7 });
+      } else {
+        // crystal: 小さな光る八面体
+        geo = new THREE.OctahedronGeometry(0.22, 0);
+        mat = new THREE.MeshStandardMaterial({
+          color: 0x88ddff, emissive: 0x2266aa, emissiveIntensity: 0.8,
+          roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.9,
+        });
+      }
+      const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(wx, wy + 0.5, wz);
       mesh.castShadow = true;
       scene.add(mesh);
       droppedItems.push({ mesh, type: itemType });
     }
 
+    function _invTotal() { return inventory.stone + inventory.wood + inventory.crystal; }
+
     function checkPickup() {
       if (!droppedItems.length) return;
-      const total = inventory.stone + inventory.wood;
-      if (total >= totalCargoCapacity) return;
+      if (_invTotal() >= totalCargoCapacity) return;
       const vx = vehicleState.pos.x, vy = vehicleState.pos.y, vz = vehicleState.pos.z;
       let picked = 0;
       for (let i = droppedItems.length - 1; i >= 0; i--) {
-        if (inventory.stone + inventory.wood >= totalCargoCapacity) break;
+        if (_invTotal() >= totalCargoCapacity) break;
         const item = droppedItems[i];
         const mp = item.mesh.position;
         const dx = mp.x - vx, dy = mp.y - vy, dz = mp.z - vz;
@@ -4786,8 +5338,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function showPickupToast(count) {
       const el = document.getElementById('pickup-toast');
-      const total = inventory.stone + inventory.wood;
-      el.textContent = `+${count} 回収 (${total}/${totalCargoCapacity})`;
+      el.textContent = `+${count} 回収 (${_invTotal()}/${totalCargoCapacity})`;
       el.classList.add('show');
       clearTimeout(_pickupToastTimer);
       _pickupToastTimer = setTimeout(() => el.classList.remove('show'), 1800);
@@ -4851,6 +5402,21 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
               const d = Math.sqrt(d2);
               if (d < 0.3 || (dx/d) * di.fx + (dz/d) * di.fz >= COS45) {
                 destroyTerrainObject(chunkKey, 'tree', i); break;
+              }
+            }
+          }
+        }
+        if (chunk.crystalPositions) {
+          for (let i = 0; i < chunk.crystalPositions.length; i++) {
+            if (destroyedTerrain.has(`${chunkKey}|crystal|${i}`)) continue;
+            const cp = chunk.crystalPositions[i];
+            for (const di of drillInfos) {
+              const dx = cp.wx - di.cx, dz = cp.wz - di.cz;
+              const d2 = dx*dx + dz*dz;
+              if (d2 > R2) continue;
+              const d = Math.sqrt(d2);
+              if (d < 0.4 || (dx/d) * di.fx + (dz/d) * di.fz >= COS45) {
+                destroyTerrainObject(chunkKey, 'crystal', i); break;
               }
             }
           }
@@ -4972,6 +5538,16 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
               const dx = px - tp.wx, dz = pz - tp.wz;
               if (dx*dx + dz*dz < 0.8 * 0.8 && py > tp.wy && py < tp.wy + 7) {
                 destroyTerrainObject(chunkKey, 'tree', ti); hit = true; break;
+              }
+            }
+          }
+          if (!hit && chunk.crystalPositions) {
+            for (let ci = 0; ci < chunk.crystalPositions.length; ci++) {
+              if (destroyedTerrain.has(`${chunkKey}|crystal|${ci}`)) continue;
+              const cp = chunk.crystalPositions[ci];
+              const dx = px - cp.wx, dy = py - cp.wy, dz = pz - cp.wz;
+              if (dx*dx + dy*dy*0.5 + dz*dz < 0.7 * 0.7) {
+                destroyTerrainObject(chunkKey, 'crystal', ci); hit = true; break;
               }
             }
           }
@@ -5180,10 +5756,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function updateInventoryHUD() {
-      document.getElementById('inv-stone').textContent = inventory.stone;
-      document.getElementById('inv-wood').textContent  = inventory.wood;
-      const total = inventory.stone + inventory.wood;
-      document.getElementById('inv-cap').textContent = `${total}/${totalCargoCapacity}`;
+      document.getElementById('inv-stone').textContent   = inventory.stone;
+      document.getElementById('inv-wood').textContent    = inventory.wood;
+      document.getElementById('inv-crystal').textContent = inventory.crystal;
+      document.getElementById('inv-cap').textContent = `${_invTotal()}/${totalCargoCapacity}`;
     }
 
     async function saveDestroyedTerrain() {
@@ -5223,20 +5799,27 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function autoStoreToBase() {
-      const s = inventory.stone, w = inventory.wood;
-      if (s === 0 && w === 0) return;
-      baseInventory.stone += s;
-      baseInventory.wood  += w;
-      inventory.stone = 0;
-      inventory.wood  = 0;
+      const s = inventory.stone, w = inventory.wood, c = inventory.crystal;
+      const cr = craneCargo.rock, cw = craneCargo.wood, cc = craneCargo.crystal;
+      if (s === 0 && w === 0 && c === 0 && cr === 0 && cw === 0 && cc === 0) return;
+      baseInventory.stone   += s + cr * 3;
+      baseInventory.wood    += w + cw * 3;
+      baseInventory.crystal += c + cc * 3;
+      inventory.stone = 0; inventory.wood = 0; inventory.crystal = 0;
+      craneCargo.rock = 0; craneCargo.wood = 0; craneCargo.crystal = 0;
+      _updateCargoBedVisual(craneAnimState.groupRef);
       updateInventoryHUD();
+      updateCraneCargo();
       updateBaseInventoryUI();
       saveBaseInventory();
-      // 収納トースト
       const el = document.getElementById('base-store-toast');
       const parts = [];
-      if (s > 0) parts.push(`🪨${s}`);
-      if (w > 0) parts.push(`🪵${w}`);
+      if (s  > 0) parts.push(`🪨${s}`);
+      if (w  > 0) parts.push(`🪵${w}`);
+      if (c  > 0) parts.push(`💎${c}`);
+      if (cr > 0) parts.push(`🪝🪨×3→${cr*3}`);
+      if (cw > 0) parts.push(`🪝🪵×3→${cw*3}`);
+      if (cc > 0) parts.push(`🪝💎×3→${cc*3}`);
       el.textContent = `🏪 拠点に収納: ${parts.join(' ')}`;
       el.classList.add('show');
       clearTimeout(_baseStoreTimer);
@@ -5253,9 +5836,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function updateBaseInventoryUI() {
-      document.getElementById('base-stone').textContent = baseInventory.stone;
-      document.getElementById('base-wood').textContent  = baseInventory.wood;
-      document.getElementById('base-total').textContent = baseInventory.stone + baseInventory.wood;
+      document.getElementById('base-stone').textContent   = baseInventory.stone;
+      document.getElementById('base-wood').textContent    = baseInventory.wood;
+      document.getElementById('base-crystal').textContent = baseInventory.crystal;
+      document.getElementById('base-total').textContent   = baseInventory.stone + baseInventory.wood + baseInventory.crystal;
     }
 
     async function saveBaseInventory() {
@@ -5265,7 +5849,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     async function loadBaseInventory() {
       try {
         const d = await dbGet('blockcraft_base_inv');
-        if (d) { baseInventory.stone = d.stone||0; baseInventory.wood = d.wood||0; }
+        if (d) { baseInventory.stone = d.stone||0; baseInventory.wood = d.wood||0; baseInventory.crystal = d.crystal||0; }
       } catch(e) {}
     }
 
@@ -5814,6 +6398,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       updateVehicleTransform();
       checkPickup();
       checkDrill(dt);
+      updateCrane(dt);
       checkBaseRange();
       fireWeapons();
       updateProjectiles(dt);
