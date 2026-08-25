@@ -1492,7 +1492,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v79';
+    const APP_VERSION = 'v80';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -1761,7 +1761,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     };
     const activeProjectiles = []; // 飛翔中の弾丸
     const activeEffects     = []; // 着弾エフェクト
-    let currentSteer   = 0;  // ステアリング補間状態 (rad)
+    let currentSteer      = 0;  // ステアリング補間状態 (rad)
+    let currentBrakeForce = 0;  // アイドルブレーキ力（徐々に増加）
     let _flipTimer     = 0;  // 転倒継続秒数（自動回復カウンター）
     const FLIP_AUTO_DELAY = 3.0; // 転倒後の自動回復までの秒数
     const STEER_SPEED  = 5;  // ステアリング補間速度 (rad/s)
@@ -6344,6 +6345,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         currentSteer += (targetSteer - currentSteer) * Math.min(1, STEER_SPEED * dt);
 
         const isBraking = Math.abs(gasInput) < 0.05;
+        const targetBrake = isBraking ? engineForcePerWheel * 0.075 : 0;
+        // スロットルOFF時にブレーキを徐々に増加（前転防止）、ON時は即座に解除
+        if (targetBrake > currentBrakeForce) {
+          currentBrakeForce = Math.min(targetBrake, currentBrakeForce + targetBrake * 2.5 * dt);
+        } else {
+          currentBrakeForce = 0;
+        }
+
         const numW = rayVehicle.wheelInfos.length;
 
         // 接地している後輪数を数え、総駆動力を接地輪にのみ分配
@@ -6365,7 +6374,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
             rayVehicle.applyEngineForce(0, i);
             rayVehicle.setSteeringValue(currentSteer, i);
           }
-          rayVehicle.setBrake(isBraking ? engineForcePerWheel * 0.075 : 0, i);
+          rayVehicle.setBrake(currentBrakeForce, i);
         }
 
         // 高速時の安定化: 角速度を緩やかに減衰（横転・スピン抑制）
