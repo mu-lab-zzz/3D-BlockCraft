@@ -1492,7 +1492,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v74';
+    const APP_VERSION = 'v75';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -6796,7 +6796,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       plane.visible      = true;
       gridHelper.visible = true;
       clearAllBlocksSilent();
-      autoSave();
+      autoLoad(); // autoSave()ではなくautoLoad()で復元（起動時に保存済みの作品を維持）
       const el = document.getElementById('opening-screen');
       el.classList.add('fadeout');
       setTimeout(() => { el.style.display = 'none'; }, 450);
