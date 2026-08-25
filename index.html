@@ -1492,7 +1492,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v72';
+    const APP_VERSION = 'v73';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -1876,7 +1876,12 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (isLargeWheelType(type)) return { w: 1, d: 1, h: 1 };
       if (isDrillType(type)) return { w: 1, d: 1, h: 1 };
       if (isWeaponType(type)) return { w: 1, d: 1, h: 1 };
-      if (isCraneType(type)) return { w: 1, d: 1, h: 1 };
+      if (isCraneType(type)) {
+        const cfg = CRANE_CONFIGS[type];
+        let w = cfg.bedW, d = cfg.bedD;
+        if ((rot / 90) % 2 !== 0) { const tmp = w; w = d; d = tmp; }
+        return { w, d, h: 1 };
+      }
       if (type === 'cyl' || type === 'cyl05') return { w: 1, d: 1, h: 1 };
       if (type === 'cylp' || type === 'cyl05p') return { w: 1, d: 1, h: 0.5 };
       if (type === 'connector') return { w: 1, d: 1, h: 1 };
@@ -2701,14 +2706,6 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         return g;
       }
       if (isCockpitType(currentBlockType)) return createCockpitPreviewMesh(currentBlockType, currentRotation);
-      if (isCraneType(currentBlockType)) {
-        const g = new THREE.Group();
-        const mat = new THREE.MeshBasicMaterial({ color:0x00ff00, transparent:true, opacity:0.38 });
-        g.add(new THREE.Mesh(new THREE.BoxGeometry(0.97,0.97,0.97), mat));
-        g.material = { color:{ setHex: hex => g.traverse(c => { if (c.isMesh) c.material.color.setHex(hex); }) } };
-        if (currentRotation) g.rotation.y = currentRotation * Math.PI / 180;
-        return g;
-      }
       const dim = getBlockDimensions(currentBlockType, currentRotation);
       const geo = new THREE.BoxGeometry(dim.w - 0.02, dim.h - 0.02, dim.d - 0.02);
       const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 });
@@ -4635,11 +4632,11 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     // ===== クレーン荷台 =====
     const CRANE_CONFIGS = {
-      crane1: { grade:1, range:5,  speed:1.8, capacity:4,  armLen:2.0 },
-      crane2: { grade:2, range:7,  speed:1.4, capacity:7,  armLen:2.8 },
-      crane3: { grade:3, range:10, speed:1.0, capacity:12, armLen:3.8 },
-      crane4: { grade:4, range:13, speed:0.75,capacity:18, armLen:5.0 },
-      crane5: { grade:5, range:17, speed:0.55,capacity:26, armLen:6.5 },
+      crane1: { grade:1, bedW:2, bedD:3, range:5,  speed:1.8, capacity:4,  armLen:2.0 },
+      crane2: { grade:2, bedW:3, bedD:4, range:7,  speed:1.4, capacity:7,  armLen:2.8 },
+      crane3: { grade:3, bedW:3, bedD:5, range:10, speed:1.0, capacity:12, armLen:3.8 },
+      crane4: { grade:4, bedW:4, bedD:6, range:13, speed:0.75,capacity:18, armLen:5.0 },
+      crane5: { grade:5, bedW:5, bedD:8, range:17, speed:0.55,capacity:26, armLen:6.5 },
     };
 
     function createCraneMesh(type, color, rot) {
@@ -4647,99 +4644,107 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const G = new THREE.Group();
       const grade = cfg.grade;
 
-      const bW  = 0.85 + grade * 0.16;
-      const bD  = bW * 1.3;
-      const bedH = 0.16, wH = 0.24, wT = 0.06;
-      const tH  = 0.5 + grade * 0.4;
-      const tW  = 0.10 + grade * 0.018;
-      const aL  = cfg.armLen;
+      // Use same dimension logic as getBlockDimensions (no group rotation needed)
+      const dim = getBlockDimensions(type, rot || 0);
+      const bW = dim.w, bD = dim.d;
+      const cx = bW / 2 - 0.5;   // mesh center X in group space
+      const cz = bD / 2 - 0.5;   // mesh center Z in group space
+
+      const bedH  = 0.36;
+      const wallH = 0.30;
+      const wallT = 0.065;
+      const tH   = 0.55 + grade * 0.30;
+      const tW   = 0.12 + grade * 0.016;
+      const aL   = cfg.armLen;
       const innerL = aL * 0.42;
-      const outerL = aL * 0.62;
-      const xR  = tW / 2 + innerL;          // hook X retracted
-      const xE  = xR + outerL * 0.78;       // hook X extended
+      const outerL = aL * 0.58;
+      const xR  = tW / 2 + innerL;
+      const xE  = xR + outerL * 0.78;
 
-      const matC = new THREE.MeshStandardMaterial({ color, roughness:0.40, metalness:0.52 });
-      const matD = new THREE.MeshStandardMaterial({ color:0x1e1e24, roughness:0.65, metalness:0.60 });
-      const matB = new THREE.MeshStandardMaterial({ color:0x48484f, roughness:0.75, metalness:0.35 });
+      const matC = new THREE.MeshStandardMaterial({ color, roughness:0.35, metalness:0.42 });
+      const matD = new THREE.MeshStandardMaterial({ color:0x1e1e24, roughness:0.65, metalness:0.55 });
 
-      // Bed floor
-      const floor = new THREE.Mesh(new THREE.BoxGeometry(bW, bedH, bD), matB);
-      floor.position.y = bedH / 2; floor.castShadow = true;
+      // Bed floor — same style as regular block body
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(bW - 0.01, bedH, bD - 0.01), matC);
+      floor.castShadow = true; floor.receiveShadow = true;
+      floor.position.set(cx, bedH / 2, cz);
       G.add(floor);
 
-      // 4 walls (low so cargo is visible from above)
-      [
-        [new THREE.BoxGeometry(wT,wH,bD), -bW/2+wT/2, bedH+wH/2, 0],
-        [new THREE.BoxGeometry(wT,wH,bD),  bW/2-wT/2, bedH+wH/2, 0],
-        [new THREE.BoxGeometry(bW,wH,wT), 0, bedH+wH/2,  bD/2-wT/2],
-        [new THREE.BoxGeometry(bW,wH,wT), 0, bedH+wH/2, -bD/2+wT/2],
-      ].forEach(([geo,x,y,z]) => {
-        const w = new THREE.Mesh(geo, matD); w.position.set(x,y,z); G.add(w);
-      });
+      // Walls around bed
+      const wallTop = bedH + wallH / 2;
+      const wL = new THREE.Mesh(new THREE.BoxGeometry(wallT, wallH, bD - 0.01), matD);
+      wL.position.set(cx - bW / 2 + wallT / 2, wallTop, cz); G.add(wL);
+      const wR = new THREE.Mesh(new THREE.BoxGeometry(wallT, wallH, bD - 0.01), matD);
+      wR.position.set(cx + bW / 2 - wallT / 2, wallTop, cz); G.add(wR);
+      const wBk = new THREE.Mesh(new THREE.BoxGeometry(bW - 0.01, wallH, wallT), matD);
+      wBk.position.set(cx, wallTop, cz - bD / 2 + wallT / 2); G.add(wBk);
+      // Front wall — shorter for visibility
+      const wFr = new THREE.Mesh(new THREE.BoxGeometry(bW - 0.01, wallH * 0.55, wallT), matD);
+      wFr.position.set(cx, bedH + (wallH * 0.55) / 2, cz + bD / 2 - wallT / 2); G.add(wFr);
 
-      // Tower (center of block)
-      const twr = new THREE.Mesh(new THREE.BoxGeometry(tW,tH,tW), matC);
-      twr.position.set(0, bedH + tH/2, 0); twr.castShadow = true;
-      G.add(twr);
+      // Tower at center of bed
+      const twrX = cx, twrZ = cz;
+      const armPivotY = bedH + wallH + tH;
+      const twr = new THREE.Mesh(new THREE.BoxGeometry(tW, tH, tW), matC);
+      twr.position.set(twrX, bedH + wallH + tH / 2, twrZ);
+      twr.castShadow = true; G.add(twr);
 
       // Cab at tower top
-      const cab = new THREE.Mesh(new THREE.BoxGeometry(tW*2.2, tW*1.6, tW*2.2), matC);
-      cab.position.set(0, bedH + tH + tW*0.8, 0);
-      G.add(cab);
+      const cab = new THREE.Mesh(new THREE.BoxGeometry(tW * 2.2, tW * 1.4, tW * 2.2), matC);
+      cab.position.set(twrX, armPivotY + tW * 0.7, twrZ); G.add(cab);
 
-      // Arm group (pivot at tower top, arm extends in +X at rotation=0)
+      // Arm group (pivot at tower top)
       const armG = new THREE.Group();
       armG.name = 'craneArm';
-      armG.position.set(0, bedH + tH, 0);
+      armG.position.set(twrX, armPivotY, twrZ);
       G.add(armG);
 
       // Counterweight (-X)
       const cwL = aL * 0.18;
-      const cwBeam = new THREE.Mesh(new THREE.BoxGeometry(cwL,0.09,0.09), matD);
-      cwBeam.position.set(-tW/2 - cwL/2, 0.05, 0); armG.add(cwBeam);
-      const cwBlock = new THREE.Mesh(new THREE.BoxGeometry(0.15+grade*0.02, 0.22+grade*0.02, 0.15+grade*0.02), matD);
-      cwBlock.position.set(-tW/2 - cwL, 0.04, 0); armG.add(cwBlock);
+      const cwBeam = new THREE.Mesh(new THREE.BoxGeometry(cwL, 0.08, 0.08), matD);
+      cwBeam.position.set(-tW / 2 - cwL / 2, 0.04, 0); armG.add(cwBeam);
+      const cwBlock = new THREE.Mesh(new THREE.BoxGeometry(0.14 + grade * 0.02, 0.20 + grade * 0.02, 0.14 + grade * 0.02), matD);
+      cwBlock.position.set(-tW / 2 - cwL, 0.03, 0); armG.add(cwBlock);
 
       // Inner beam (+X)
-      const ibMesh = new THREE.Mesh(new THREE.BoxGeometry(innerL,0.09,0.09), matC);
-      ibMesh.position.set(tW/2 + innerL/2, 0, 0); armG.add(ibMesh);
+      const ibMesh = new THREE.Mesh(new THREE.BoxGeometry(innerL, 0.08, 0.08), matC);
+      ibMesh.position.set(tW / 2 + innerL / 2, 0, 0); armG.add(ibMesh);
 
-      // Outer beam (extender, starts retracted: tip at xR)
-      const obMesh = new THREE.Mesh(new THREE.BoxGeometry(outerL, 0.072, 0.072), matC);
+      // Outer beam (extender, starts retracted)
+      const obMesh = new THREE.Mesh(new THREE.BoxGeometry(outerL, 0.065, 0.065), matC);
       obMesh.name = 'craneArmOuter';
-      obMesh.position.set(xR - outerL/2, 0, 0);
-      armG.add(obMesh);
+      obMesh.position.set(xR - outerL / 2, 0, 0); armG.add(obMesh);
 
-      // Hook group (slides in X, descends in Y)
+      // Hook group
       const hookG = new THREE.Group();
       hookG.name = 'craneHook';
       hookG.position.set(xR, 0, 0);
       armG.add(hookG);
 
       const cableH = 0.35;
-      const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,cableH,4), matD);
+      const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, cableH, 4), matD);
       cable.name = 'craneCable';
-      cable.position.y = -cableH / 2;
-      hookG.add(cable);
+      cable.position.y = -cableH / 2; hookG.add(cable);
 
-      const hookSph = new THREE.Mesh(new THREE.SphereGeometry(0.06+grade*0.01, 8, 6), matD);
+      const hookSph = new THREE.Mesh(new THREE.SphereGeometry(0.06 + grade * 0.01, 8, 6), matD);
       hookSph.name = 'craneHookSph';
-      hookSph.position.y = -cableH - 0.07;
-      hookG.add(hookSph);
+      hookSph.position.y = -cableH - 0.07; hookG.add(hookSph);
 
-      // Cargo contents group (items show here)
+      // Cargo contents group
       const cargoG = new THREE.Group();
       cargoG.name = 'craneCargo';
-      cargoG.position.set(0, bedH + 0.02, 0);
-      G.add(cargoG);
+      cargoG.position.set(cx, bedH + 0.02, cz); G.add(cargoG);
 
       G.userData.craneType  = type;
+      G.userData.bedW       = bW;
+      G.userData.bedD       = bD;
       G.userData.xRetracted = xR;
       G.userData.xExtended  = xE;
       G.userData.outerL     = outerL;
       G.userData.cableH     = cableH;
+      G.userData.armPivotX  = twrX;
+      G.userData.armPivotZ  = twrZ;
 
-      if (rot) G.rotation.y = rot * Math.PI / 2;
       return G;
     }
 
@@ -4769,7 +4774,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       }
       const cfg = CRANE_CONFIGS[craneGroup.userData.craneType];
       if (!cfg) return;
-      const bW = 0.85 + cfg.grade * 0.16, bD = bW * 1.3;
+      const bW = craneGroup.userData.bedW || cfg.bedW || 2;
+      const bD = craneGroup.userData.bedD || cfg.bedD || 3;
       const items = [];
       for (let i = 0; i < craneCargo.rock;    i++) items.push('rock');
       for (let i = 0; i < craneCargo.wood;    i++) items.push('wood');
@@ -4868,11 +4874,13 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         if (!best) return;
 
         const localTarget = st.groupRef.worldToLocal(new THREE.Vector3(best.wx, cranePos.y, best.wz));
+        const apX = st.groupRef.userData.armPivotX || 0;
+        const apZ = st.groupRef.userData.armPivotZ || 0;
         st.target      = best;
         st.phase       = 'swing_to';
         st.t           = 0;
         st.startAngle  = armG.rotation.y;
-        st.targetAngle = Math.atan2(localTarget.z, localTarget.x);
+        st.targetAngle = Math.atan2(localTarget.z - apZ, localTarget.x - apX);
         return;
       }
 
@@ -4910,7 +4918,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         if (hookSph) hookSph.scale.setScalar(1 + Math.abs(Math.sin(st.t * 18)) * 0.35 * Math.max(0, 1-st.t*1.8));
         if (st.t > 0.45 && !st.grabMesh) {
           st.grabMesh = _makeGrabbedMesh(st.target.type);
-          st.grabMesh.position.y = -st.dropDist - 0.42;
+          st.grabMesh.position.y = -0.42;
           hookG.add(st.grabMesh);
           destroyTerrainObject(st.target.chunkKey, st.target.type, st.target.idx, true);
         }
