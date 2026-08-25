@@ -1492,7 +1492,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v73';
+    const APP_VERSION = 'v74';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -1567,6 +1567,20 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     const occupiedGrid = new Map();
     const blocksHistory = [];
     const blockMeshes = [];
+
+    // --- レンダリング on-demand ---
+    let _needsRender = true;
+    function markDirty() { _needsRender = true; }
+
+    // --- マテリアルキャッシュ (同色・同パラメータは共有) ---
+    const _matCache = new Map();
+    function getBlockMat(color, roughness = 0.3, metalness = 0) {
+      const key = `${color}_${roughness}_${metalness}`;
+      if (!_matCache.has(key)) {
+        _matCache.set(key, new THREE.MeshStandardMaterial({ color, roughness, metalness }));
+      }
+      return _matCache.get(key);
+    }
 
     let mode = 'add';
     let currentBlockType = '1x1';
@@ -1791,6 +1805,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       camera.position.x = cameraTarget.x + cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta);
       camera.position.y = cameraTarget.y + cameraRadius * Math.cos(cameraPhi);
       camera.position.z = cameraTarget.z + cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+      markDirty();
       camera.lookAt(cameraTarget);
     }
     updateCameraPosition();
@@ -2250,7 +2265,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       else {
         const dim = getBlockDimensions(type, rot);
         group = new THREE.Group();
-        const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+        const mat = getBlockMat(color, 0.3, 0);
         const studGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12);
 
         const blockTilt = tilt && isTiltableBlock(type) ? tilt : null;
@@ -2267,7 +2282,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
           for (let xi = 0; xi < dim.d; xi++) {
             for (let zi = 0; zi < dim.w; zi++) {
               const stud = new THREE.Mesh(studGeo, mat);
-              stud.castShadow = true;
+              stud.castShadow = false;
               stud.position.set(xi - (dim.d - 1) / 2, dim.h / 2 + 0.06, zi - (dim.w - 1) / 2);
               inner.add(stud);
             }
@@ -2290,7 +2305,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
             for (let z = 0; z < dim.d; z++) {
               const stud = new THREE.Mesh(studGeo, mat);
               stud.position.set(x, dim.h + 0.02, z);
-              stud.castShadow = true;
+              stud.castShadow = false;
               group.add(stud);
             }
           }
@@ -2304,7 +2319,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function createWheelMesh(color, rot) {
       const group = new THREE.Group();
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+      const mat = getBlockMat(color, 0.3, 0);
       const tireMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.95 });
 
       const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
@@ -2324,7 +2339,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       // 本体上スタッド
       const studGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12);
       const stud = new THREE.Mesh(studGeo, mat);
-      stud.castShadow = true;
+      stud.castShadow = false;
       stud.position.set(0, 1.02, 0);
       group.add(stud);
 
@@ -2361,7 +2376,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function createLargeWheelMesh(type, color, rot) {
       const group = new THREE.Group();
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+      const mat = getBlockMat(color, 0.3, 0);
       const tireMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.95 });
 
       const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
@@ -2380,7 +2395,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
       // 本体上スタッド
       const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12), mat);
-      stud.castShadow = true;
+      stud.castShadow = false;
       stud.position.set(0, 1.02, 0);
       group.add(stud);
 
@@ -2452,7 +2467,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function createCylinderMesh(type, color, tilt) {
       const group = new THREE.Group();
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+      const mat = getBlockMat(color, 0.3, 0);
 
       const cylSize = getLargeCylSize(type);
       if (cylSize !== null) {
@@ -2486,7 +2501,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (!tilt) {
         const studR = isHalf ? 0.1 : 0.18;
         const stud = new THREE.Mesh(new THREE.CylinderGeometry(studR, studR, 0.1, 12), mat);
-        stud.castShadow = true;
+        stud.castShadow = false;
         stud.position.set(0, h + 0.01, 0);
         group.add(stud);
       }
@@ -2496,7 +2511,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function createConnectorMesh(color, rot) {
       const group = new THREE.Group();
-      const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+      const mat = getBlockMat(color, 0.3, 0);
       const rotSteps = (Math.round(rot / 90) % 4 + 4) % 4;
       let axleX = 0, axleZ = 0;
       if      (rotSteps === 0) { axleX =  1; }
@@ -2515,7 +2530,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       group.add(body);
 
       const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.12, 12), mat);
-      stud.castShadow = true;
+      stud.castShadow = false;
       stud.position.set(0, 1.02, 0);
       group.add(stud);
 
@@ -2560,7 +2575,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       const w = dim.w, d = dim.d;
       const cx = w / 2 - 0.5, cz = d / 2 - 0.5;
 
-      const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.3 });
+      const bodyMat = getBlockMat(color, 0.3, 0);
       const glassMat = new THREE.MeshStandardMaterial({
         color: 0x99ddff, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.38
       });
@@ -2961,6 +2976,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     async function autoSave() {
+      markDirty();
       try {
         const state = serializeCurrentState();
         const key = survivalWorkshop ? 'block_craft_survival' : 'block_craft_autosave';
@@ -3482,6 +3498,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
     function updateRaycast() {
       if (mouseVector.x === -999) return;
+      markDirty();
 
       raycaster.setFromCamera(mouseVector, camera);
       // workshopモードはブロック面のみにスナップ（ただしブロックが0個の時は plane にフォールバック）
@@ -7016,37 +7033,44 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     function animate(now = 0) {
       requestAnimationFrame(animate);
 
-      // 削除ハイライト明滅アニメーション
-      if (_deleteHLGroup && _deleteHLEntries.length > 0) {
-        const t = (Math.sin(now * 0.007) + 1) * 0.5; // 0→1 を約900ms周期で
-        const intensity = 0.25 + t * 0.75;
-        const opacity   = 0.55 + t * 0.45;
-        for (const { mesh } of _deleteHLEntries) {
-          if (mesh.material) {
-            mesh.material.emissiveIntensity = intensity;
-            mesh.material.opacity = opacity;
-          }
-        }
-      }
-
-      if (gameMode === 'build') {
-        if (isJoystickActive) {
-          cameraTheta += joyVec.x * 0.04;
-          cameraPhi   += joyVec.y * 0.03;
-          // workshopでは下からも見られるよう上限をπ近くまで開放
-          const phiMax = survivalWorkshop ? Math.PI - 0.05 : Math.PI / 2 - 0.05;
-          cameraPhi = Math.max(0.05, Math.min(phiMax, cameraPhi));
-          updateCameraPosition();
-        }
-        updateRaycast();
-      } else if (gameMode === 'fps') {
-        updateFPS(now);
-      } else if (gameMode === 'survival') {
+      if (gameMode === 'survival') {
         updateSurvival(now);
         rebuildDirtyChunks();
-      }
+        renderer.render(scene, camera);
+      } else {
+        if (gameMode === 'build') {
+          if (isJoystickActive) {
+            cameraTheta += joyVec.x * 0.04;
+            cameraPhi   += joyVec.y * 0.03;
+            const phiMax = survivalWorkshop ? Math.PI - 0.05 : Math.PI / 2 - 0.05;
+            cameraPhi = Math.max(0.05, Math.min(phiMax, cameraPhi));
+            updateCameraPosition();
+          }
+          updateRaycast();
+        } else if (gameMode === 'fps') {
+          updateFPS(now);
+          _needsRender = true;
+        }
 
-      renderer.render(scene, camera);
+        // 削除ハイライト明滅アニメーション
+        if (_deleteHLGroup && _deleteHLEntries.length > 0) {
+          const t = (Math.sin(now * 0.007) + 1) * 0.5;
+          const intensity = 0.25 + t * 0.75;
+          const opacity   = 0.55 + t * 0.45;
+          for (const { mesh } of _deleteHLEntries) {
+            if (mesh.material) {
+              mesh.material.emissiveIntensity = intensity;
+              mesh.material.opacity = opacity;
+            }
+          }
+          _needsRender = true;
+        }
+
+        if (_needsRender) {
+          renderer.render(scene, camera);
+          _needsRender = false;
+        }
+      }
     }
     animate();
 
