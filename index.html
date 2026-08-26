@@ -1492,7 +1492,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v84';
+    const APP_VERSION = 'v85';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -1933,6 +1933,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (type === 'laser')   return 'レーザー';
       if (type === 'cannon')  return '大砲';
       if (type === 'shotgun') return 'ショットガン';
+      if (type === 'sniper')  return '狙撃銃';
       if (isCraneType(type)) { const g = getCraneGrade(type); return `クレーン Mk.${['Ⅰ','Ⅱ','Ⅲ','Ⅳ','Ⅴ'][g-1]}`; }
       const cylSize = getLargeCylSize(type);
       if (cylSize !== null) return `円柱${cylSize}${type.endsWith('p') ? '薄' : ''}`;
@@ -2229,6 +2230,56 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       return group;
     }
 
+    function createSniperMesh(color, rot) {
+      const group = new THREE.Group();
+      const bodyMat  = new THREE.MeshStandardMaterial({ color, roughness: 0.30, metalness: 0.55 });
+      const darkMat  = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5, metalness: 0.5 });
+      const metalMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.20, metalness: 0.95 });
+
+      // ボディ（細長め）
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.52, 0.90), bodyMat);
+      body.position.set(0, 0.5, 0); group.add(body);
+
+      // 長い銃身
+      const brl = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 1.10, 10), metalMat);
+      brl.rotation.x = Math.PI / 2; brl.position.set(0, 0.58, 1.00); brl.raycast = () => {}; group.add(brl);
+
+      // マズルブレーキ
+      const muz = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.042, 0.12, 8), metalMat);
+      muz.rotation.x = Math.PI / 2; muz.position.set(0, 0.58, 1.59); muz.raycast = () => {}; group.add(muz);
+
+      // スコープ本体
+      const scopeBody = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.55, 10), darkMat);
+      scopeBody.rotation.x = Math.PI / 2; scopeBody.position.set(0, 0.83, 0.05); scopeBody.raycast = () => {}; group.add(scopeBody);
+
+      // スコープレンズ（前後）
+      for (const zOff of [-0.26, 0.28]) {
+        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.06, 10), metalMat);
+        lens.rotation.x = Math.PI / 2; lens.position.set(0, 0.83, zOff); lens.raycast = () => {}; group.add(lens);
+      }
+
+      // スコープマウント
+      const mount = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.14, 0.44), darkMat);
+      mount.position.set(0, 0.70, 0.05); mount.raycast = () => {}; group.add(mount);
+
+      // グリップ
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.28, 0.14), bodyMat);
+      grip.position.set(0, 0.22, 0.06); grip.raycast = () => {}; group.add(grip);
+
+      // バイポッド（2本脚）
+      for (const sx of [-0.14, 0.14]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.04), darkMat);
+        leg.position.set(sx, 0.28, 0.72); leg.raycast = () => {}; group.add(leg);
+      }
+
+      const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.12, 12), bodyMat);
+      stud.castShadow = false; stud.position.set(0, 0.84, 0); stud.raycast = () => {}; group.add(stud);
+
+      group.userData.blockType = 'sniper';
+      group.rotation.y = THREE.MathUtils.degToRad(rot);
+      return group;
+    }
+
     function createLaserMesh(color, rot) {
       const group = new THREE.Group();
       const bodyMat    = new THREE.MeshStandardMaterial({ color, roughness: 0.20, metalness: 0.70 });
@@ -2296,6 +2347,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       else if (type === 'laser')     { group = createLaserMesh(color, rot); }
       else if (type === 'cannon')    { group = createCannonMesh(color, rot); }
       else if (type === 'shotgun')   { group = createShotgunMesh(color, rot); }
+      else if (type === 'sniper')    { group = createSniperMesh(color, rot); }
       else if (isCockpitType(type))  group = createCockpitMesh(type, color, rot);
       else if (isCraneType(type))    { group = createCraneMesh(type, color, rot); }
       else {
@@ -3485,7 +3537,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function isWeaponType(type) {
-      return type === 'rifle' || type === 'laser' || type === 'cannon' || type === 'shotgun';
+      return type === 'rifle' || type === 'laser' || type === 'cannon' || type === 'shotgun' || type === 'sniper';
     }
 
     function isCraneType(type) { return /^crane[1-5]$/.test(type); }
@@ -3496,6 +3548,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       laser:   { damage: 1, range: 45, cooldown: 0.07, speed: 80, gravityMult: 0,    projColor: 0x00eeff },
       cannon:  { damage: 4, range: 65, cooldown: 0.90, speed: 42, gravityMult: 0.22, projColor: 0xddcc44 },
       shotgun: { damage: 1, range: 13, cooldown: 0.70, speed: 30, gravityMult: 0.20, projColor: 0xff4400, pellets: 8, spread: 0.16 },
+      sniper:  { damage: 2, range:100, cooldown: 0.90, speed: 80, gravityMult: 0.10, projColor: 0xffff00 },
     };
 
     function isLargeWheelType(type) {
@@ -3825,6 +3878,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         { type: 'laser',   label: 'レーザー',     title: 'ダメージ1 射程中 連射速 直線' },
         { type: 'cannon',  label: '大砲',         title: 'ダメージ4 射程長 連射遅 放物線' },
         { type: 'shotgun', label: 'ショットガン', title: 'ダメージ1×8弾 射程短 拡散' },
+        { type: 'sniper',  label: '狙撃銃',       title: 'ダメージ2 射程超長 連射遅 低重力' },
       ]);
       addSection('⚙ その他', [
         { type: 'connector', label: '接続面',    title: '回転で接続面の向きを変更' },
