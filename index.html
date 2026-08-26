@@ -1492,7 +1492,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v83';
+    const APP_VERSION = 'v84';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -1929,9 +1929,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       if (type === 'drillA') return 'アーガー';
       if (type === 'drillB') return 'ロータリー';
       if (type === 'drillC') return 'ランス';
-      if (type === 'rifle')  return 'ライフル';
-      if (type === 'laser')  return 'レーザー';
-      if (type === 'cannon') return '大砲';
+      if (type === 'rifle')   return 'ライフル';
+      if (type === 'laser')   return 'レーザー';
+      if (type === 'cannon')  return '大砲';
+      if (type === 'shotgun') return 'ショットガン';
       if (isCraneType(type)) { const g = getCraneGrade(type); return `クレーン Mk.${['Ⅰ','Ⅱ','Ⅲ','Ⅳ','Ⅴ'][g-1]}`; }
       const cylSize = getLargeCylSize(type);
       if (cylSize !== null) return `円柱${cylSize}${type.endsWith('p') ? '薄' : ''}`;
@@ -2193,6 +2194,41 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       return group;
     }
 
+    function createShotgunMesh(color, rot) {
+      const group = new THREE.Group();
+      const bodyMat  = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.40 });
+      const darkMat  = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6, metalness: 0.3 });
+      const metalMat = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.25, metalness: 0.85 });
+
+      // 幅広ボディ
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.90, 0.62, 0.82), bodyMat);
+      body.position.set(0, 0.5, 0); group.add(body);
+
+      // 2連バレル（上下）
+      for (let i = 0; i < 2; i++) {
+        const y = 0.5 + (i === 0 ? 0.10 : -0.10);
+        const brl = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.55, 8), metalMat);
+        brl.rotation.x = Math.PI / 2; brl.position.set(0, y, 0.78); brl.raycast = () => {}; group.add(brl);
+        const muz = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.018, 6, 10), darkMat);
+        muz.rotation.x = Math.PI / 2; muz.position.set(0, y, 1.06); muz.raycast = () => {}; group.add(muz);
+      }
+
+      // フォアグリップ
+      const fore = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.16, 0.38), darkMat);
+      fore.position.set(0, 0.30, 0.50); fore.raycast = () => {}; group.add(fore);
+
+      // グリップ
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.28, 0.16), bodyMat);
+      grip.position.set(0, 0.22, 0.06); grip.raycast = () => {}; group.add(grip);
+
+      const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.12, 12), bodyMat);
+      stud.castShadow = false; stud.position.set(0, 0.84, 0); stud.raycast = () => {}; group.add(stud);
+
+      group.userData.blockType = 'shotgun';
+      group.rotation.y = THREE.MathUtils.degToRad(rot);
+      return group;
+    }
+
     function createLaserMesh(color, rot) {
       const group = new THREE.Group();
       const bodyMat    = new THREE.MeshStandardMaterial({ color, roughness: 0.20, metalness: 0.70 });
@@ -2259,6 +2295,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
       else if (type === 'rifle')     { group = createRifleMesh(color, rot); }
       else if (type === 'laser')     { group = createLaserMesh(color, rot); }
       else if (type === 'cannon')    { group = createCannonMesh(color, rot); }
+      else if (type === 'shotgun')   { group = createShotgunMesh(color, rot); }
       else if (isCockpitType(type))  group = createCockpitMesh(type, color, rot);
       else if (isCraneType(type))    { group = createCraneMesh(type, color, rot); }
       else {
@@ -3448,16 +3485,17 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
     }
 
     function isWeaponType(type) {
-      return type === 'rifle' || type === 'laser' || type === 'cannon';
+      return type === 'rifle' || type === 'laser' || type === 'cannon' || type === 'shotgun';
     }
 
     function isCraneType(type) { return /^crane[1-5]$/.test(type); }
     function getCraneGrade(type) { return isCraneType(type) ? parseInt(type.slice(-1)) : 0; }
 
     const WEAPON_STATS = {
-      rifle:  { damage: 2, range: 25, cooldown: 0.15, speed: 32, gravityMult: 0.35, projColor: 0xff7700 },
-      laser:  { damage: 1, range: 45, cooldown: 0.07, speed: 80, gravityMult: 0,    projColor: 0x00eeff },
-      cannon: { damage: 4, range: 65, cooldown: 0.90, speed: 42, gravityMult: 0.22, projColor: 0xddcc44 },
+      rifle:   { damage: 2, range: 25, cooldown: 0.15, speed: 32, gravityMult: 0.35, projColor: 0xff7700 },
+      laser:   { damage: 1, range: 45, cooldown: 0.07, speed: 80, gravityMult: 0,    projColor: 0x00eeff },
+      cannon:  { damage: 4, range: 65, cooldown: 0.90, speed: 42, gravityMult: 0.22, projColor: 0xddcc44 },
+      shotgun: { damage: 1, range: 13, cooldown: 0.70, speed: 30, gravityMult: 0.20, projColor: 0xff4400, pellets: 8, spread: 0.16 },
     };
 
     function isLargeWheelType(type) {
@@ -3783,9 +3821,10 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
 
       // その他
       addSection('🔫 武器', [
-        { type: 'rifle',  label: 'ライフル', title: 'ダメージ2 射程短 連射中 放物線' },
-        { type: 'laser',  label: 'レーザー', title: 'ダメージ1 射程中 連射速 直線' },
-        { type: 'cannon', label: '大砲',     title: 'ダメージ4 射程長 連射遅 放物線' },
+        { type: 'rifle',   label: 'ライフル',     title: 'ダメージ2 射程短 連射中 放物線' },
+        { type: 'laser',   label: 'レーザー',     title: 'ダメージ1 射程中 連射速 直線' },
+        { type: 'cannon',  label: '大砲',         title: 'ダメージ4 射程長 連射遅 放物線' },
+        { type: 'shotgun', label: 'ショットガン', title: 'ダメージ1×8弾 射程短 拡散' },
       ]);
       addSection('⚙ その他', [
         { type: 'connector', label: '接続面',    title: '回転で接続面の向きを変更' },
@@ -5487,24 +5526,35 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         wb.group.getWorldQuaternion(wquat);
         const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(wquat);
 
-        const mesh = _makeProjectileMesh(wb.type);
-        // レーザーは進行方向に向ける
-        if (wb.type === 'laser') mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), fwd);
-        mesh.position.copy(wpos).addScaledVector(fwd, 0.9);
-        scene.add(mesh);
+        const pellets = stats.pellets ?? 1;
+        const spread  = stats.spread  ?? 0;
 
-        // 放物線系は少し上向きに初速補正（射程に応じて計算）
-        const upLift = stats.gravityMult > 0
-          ? 0.5 * 9.8 * stats.gravityMult * (stats.range / stats.speed) * 0.5
-          : 0;
-        activeProjectiles.push({
-          mesh,
-          vx: fwd.x * stats.speed, vy: fwd.y * stats.speed + upLift, vz: fwd.z * stats.speed,
-          damage: stats.damage,
-          traveled: 0, maxRange: stats.range,
-          gravityMult: stats.gravityMult,
-          weaponType: wb.type,
-        });
+        for (let p = 0; p < pellets; p++) {
+          const mesh = _makeProjectileMesh(wb.type);
+          // 拡散ベクトル計算
+          const dir = fwd.clone();
+          if (spread > 0) {
+            dir.x += (Math.random() - 0.5) * spread;
+            dir.y += (Math.random() - 0.5) * spread * 0.5;
+            dir.z += (Math.random() - 0.5) * spread;
+            dir.normalize();
+          }
+          if (wb.type === 'laser') mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+          mesh.position.copy(wpos).addScaledVector(dir, 0.9);
+          scene.add(mesh);
+
+          const upLift = stats.gravityMult > 0
+            ? 0.5 * 9.8 * stats.gravityMult * (stats.range / stats.speed) * 0.5
+            : 0;
+          activeProjectiles.push({
+            mesh,
+            vx: dir.x * stats.speed, vy: dir.y * stats.speed + upLift, vz: dir.z * stats.speed,
+            damage: stats.damage,
+            traveled: 0, maxRange: stats.range,
+            gravityMult: stats.gravityMult,
+            weaponType: wb.type,
+          });
+        }
       }
     }
 
