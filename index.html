@@ -1492,7 +1492,7 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
   </div>
 
   <script>
-    const APP_VERSION = 'v82';
+    const APP_VERSION = 'v83';
 
     // ===== IndexedDB ラッパー =====
     const _DB_NAME  = 'BlockCraft';
@@ -5243,13 +5243,14 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         const cidx = crystalMeshes.length;
         const alive = !destroyedTerrain.has(`${_chunkKey}|crystal|${cidx}`);
         const clusterG = _createCrystalCluster(cfg);
+        clusterG.scale.set(2, 2, 2);
         clusterG.position.set(wx, wy - 0.08, wz2);
         clusterG.rotation.y = rngX() * Math.PI * 2;
         clusterG.visible = alive && (gameMode === 'survival');
         scene.add(clusterG);
         objects.push(clusterG);
         crystalMeshes.push(clusterG);
-        crystalPositions.push({ wx, wy, wz: wz2, r: 0.55 });
+        crystalPositions.push({ wx, wy, wz: wz2, r: 1.1 });
       }
 
       terrainChunkMap.set(_tcKey(cx,cz), {
@@ -5320,8 +5321,8 @@ class ObjectCollisionMatrix{constructor(){this.matrix={}}get(e,t){let{id:s}=e,{i
         geo = new THREE.BoxGeometry(0.32, 0.22, 0.42);
         mat = new THREE.MeshStandardMaterial({ color: 0x8b5e3c, roughness: 0.7 });
       } else {
-        // crystal: 小さな光る八面体
-        geo = new THREE.OctahedronGeometry(0.22, 0);
+        // crystal: 光る八面体
+        geo = new THREE.OctahedronGeometry(0.44, 0);
         mat = new THREE.MeshStandardMaterial({
           color: 0x88ddff, emissive: 0x2266aa, emissiveIntensity: 0.8,
           roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.9,
